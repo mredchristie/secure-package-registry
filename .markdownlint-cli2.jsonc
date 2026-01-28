@@ -1,0 +1,13 @@
+{
+  "$schema": "https://raw.githubusercontent.com/DavidAnson/markdownlint-cli2/main/schema/markdownlint-cli2-config-schema.json",
+  "ignores": ["references/**"],
+  "config": {
+    "MD013": false,
+    "MD033": {
+      "allowed_elements": ["br"]
+    },
+    "MD041": false,
+    "MD036": false
+  },
+  "fix": true
+}

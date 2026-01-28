@@ -1,0 +1,89 @@
+{
+  "$schema": "./packages/@biomejs/biome/configuration_schema.json",
+  "assist": {
+    "actions": {
+      "source": {
+        "organizeImports": "on",
+        "useSortedKeys": "on"
+      }
+    },
+    "enabled": true,
+    "includes": [
+      "**",
+      "!./packages/@biomejs/biome/configuration_schema.json"
+    ]
+  },
+  "css": {
+    "linter": {
+      "enabled": true
+    }
+  },
+  "files": {
+    "includes": [
+      "**/packages/aria-data/*.js",
+      "**/packages/@biomejs/**",
+      "**/packages/tailwindcss-config-analyzer/**",
+      "**/benchmark/**",
+      "plugins/*.js",
+      "scripts/**",
+      "src/**",
+      "*.ts",
+      "*.json",
+      "!**/crates",
+      "!**/dist",
+      "!**/packages/@biomejs/backend-jsonrpc/src/workspace.ts",
+      "!**/__snapshots__",
+      "!**/undefined",
+      "!**/benchmark/target",
+      "!**/benches",
+      "!!**/target",
+      "!!.cargo"
+    ]
+  },
+  "formatter": {
+    "includes": [
+      "**",
+      "!**/configuration_schema.json"
+    ]
+  },
+  "json": {
+    "formatter": {
+      "indentStyle": "space",
+      "lineWidth": 1
+    }
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "correctness": {
+        "noUndeclaredDependencies": "error"
+      },
+      "nursery": {
+        "noFloatingPromises": "error",
+        "noImportCycles": "error"
+      },
+      "style": {
+        "noInferrableTypes": "error",
+        "noParameterAssign": "error",
+        "noUnusedTemplateLiteral": "error",
+        "noUselessElse": "error",
+        "useAsConstAssertion": "error",
+        "useConst": "error",
+        "useDefaultParameterLast": "error",
+        "useEnumInitializers": "error",
+        "useNumberNamespace": "error",
+        "useSelfClosingElements": "error",
+        "useSingleVarDeclarator": "error",
+        "useTemplate": "error"
+      },
+      "suspicious": {
+        "noVar": "on"
+      }
+    }
+  },
+  "vcs": {
+    "clientKind": "git",
+    "enabled": true,
+    "useIgnoreFile": true
+  }
+}
