@@ -184,3 +184,65 @@ Exceptions will be made during emergencies. We can work out better strategies as
 ## Change Log
 
 N/A
+
+## Appendix
+
+### 1. MR Bot
+
+```json
+{
+  "username": "GitLab MR Bot",
+  "content": "New Merge Request in **{{project.namespace}}/{{project.name}}**",
+  "embeds": [
+    {
+      "title": "MR !{{object_attributes.iid}}: {{object_attributes.title}}",
+      "url": "{{object_attributes.url}}",
+      "description": "**Action:** {{object_attributes.action}}\n**Author:** {{user.name}}\n**Branch:** `{{object_attributes.source_branch}}` → `{{object_attributes.target_branch}}`",
+      "color": 3447003,
+      "footer": {
+        "text": "{{project.namespace}}/{{project.name}}"
+      }
+    }
+  ]
+}
+```
+
+### 2. Issue Bot
+
+```json
+{
+  "username": "GitLab Issues Bot",
+  "content": "New Issue in **{{project.namespace}}/{{project.name}}**",
+  "embeds": [
+    {
+      "title": "#{{object_attributes.iid}}: {{object_attributes.title}}",
+      "url": "{{object_attributes.url}}",
+      "description": "**State:** {{object_attributes.state}}\n**Author:** {{user.name}}\n\n{{object_attributes.description}}",
+      "color": 15158332,
+      "footer": {
+        "text": "{{project.namespace}}/{{project.name}}"
+      }
+    }
+  ]
+}
+```
+
+### 3. Comment Bot
+
+```json
+{
+  "username": "GitLab Comments Bot",
+  "content": "New comment on **{{project.namespace}}/{{project.name}}**",
+  "embeds": [
+    {
+      "title": "Comment on {{noteable_type}} #{{issue.iid}}{{merge_request.iid}}",
+      "url": "{{object_attributes.url}}",
+      "description": "**Author:** {{user.name}}\n**Comment:** {{object_attributes.note}}",
+      "color": 10181046,
+      "footer": {
+        "text": "{{project.namespace}}/{{project.name}}"
+      }
+    }
+  ]
+}
+```
