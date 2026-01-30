@@ -19,5 +19,6 @@ Choices made:
 
 - `set -e` is used for the check script to ensure that any failure in the commands causes the script to exit immediately, preventing further execution and potential errors. This is unnecessary for the `fix` script as it is designed to fix everything, and therefore we prefer it to fix as much as possible rather than stopping at the first error.
 
+- A precommit script is used to ensure that code is always formatted before committing, we use the same commands as in `just` to avoid duplication of effort.
 
 
