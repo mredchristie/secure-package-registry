@@ -1,8 +1,9 @@
 +++
 title = "RFC Guidelines and Process"
 author = ["cheongyx@cardiff.ac.uk"]
+reviewers = ["ReadB5@cardiff.ac.uk", "ChristieE1@cardiff.ac.uk"]
 date = "2026-01-28"
-status = "review"
+status = "complete"
 +++
 
 ## Summary
@@ -68,7 +69,7 @@ reviewers = ["me@example.com", "rando@example.com"]
 tags = ["reproducible_builds", "behavioral_detection"] # Components of the system. Specific tags are to be added in a later RFC on architecture and components
 creation = "2026-01-27"
 last_update = "2026-01-29"
-status = "draft" # draft -> review -> (approved -> implemented) | declined -> superseded
+status = "draft" # draft -> review -> complete -> superseded | declined. Approved is not a valid status as that is implied by presence in the repository.
 superseded_by = ["2026-01-29-other-rfc.md"] # Optional
 depends_on = ["2026-01-01-discord.md"] # Optional
 +++
@@ -122,6 +123,11 @@ considered automatically approved.
 For the RFC process to be effective, members must be notified and aware of the process. A Discord webhook should post
 new RFCs to a dedicated channel. Tagged reviewers should be pinged.
 
+GitLab's webhook feature is limited. It only allows filtering by feature (Merge request, issue, comments), but not
+differences between event types within. So every time you pushed to a branch with a open pull request, it treats that
+the same as opening a new pull request. As such, we have decided to go with Cloudflare workers to do a pre-processing
+step before pushing to Discord. The source code is tracked at `../infra/gitlab-webhooks-handler/`.
+
 ### Revision of an existing RFC
 
 Modifying an existing RFC is often a bad idea. We need an accurate historical record of decision making while keeping
@@ -138,11 +144,11 @@ RFCs folder as to not pollute context. The old RFC should clearly reference whic
 
 Example flow:
 
-1.  RFC-001: Use MongoDB → Approved → Partially implemented
-2.  Discover: MongoDB doesn't meet needs → Write RFC-002
-3.  RFC-002: Use PostgreSQL → supersedes = ["RFC-001"]
-4.  Keep MongoDB code running during migration
-5.  Both RFCs remain valid documentation for their respective implementations
+1. RFC-001: Use MongoDB → Approved → Partially implemented
+2. Discover: MongoDB doesn't meet needs → Write RFC-002
+3. RFC-002: Use PostgreSQL → supersedes = ["RFC-001"]
+4. Keep MongoDB code running during migration
+5. Both RFCs remain valid documentation for their respective implementations
 
 ### Approve, decline, and block
 
@@ -184,65 +190,3 @@ Exceptions will be made during emergencies. We can work out better strategies as
 ## Change Log
 
 N/A
-
-## Appendix
-
-### 1. MR Bot
-
-```json
-{
-  "username": "GitLab MR Bot",
-  "content": "New Merge Request in **{{project.namespace}}/{{project.name}}**",
-  "embeds": [
-    {
-      "title": "MR !{{object_attributes.iid}}: {{object_attributes.title}}",
-      "url": "{{object_attributes.url}}",
-      "description": "**Action:** {{object_attributes.action}}\n**Author:** {{user.name}}\n**Branch:** `{{object_attributes.source_branch}}` → `{{object_attributes.target_branch}}`",
-      "color": 3447003,
-      "footer": {
-        "text": "{{project.namespace}}/{{project.name}}"
-      }
-    }
-  ]
-}
-```
-
-### 2. Issue Bot
-
-```json
-{
-  "username": "GitLab Issues Bot",
-  "content": "New Issue in **{{project.namespace}}/{{project.name}}**",
-  "embeds": [
-    {
-      "title": "#{{object_attributes.iid}}: {{object_attributes.title}}",
-      "url": "{{object_attributes.url}}",
-      "description": "**State:** {{object_attributes.state}}\n**Author:** {{user.name}}\n\n{{object_attributes.description}}",
-      "color": 15158332,
-      "footer": {
-        "text": "{{project.namespace}}/{{project.name}}"
-      }
-    }
-  ]
-}
-```
-
-### 3. Comment Bot
-
-```json
-{
-  "username": "GitLab Comments Bot",
-  "content": "New comment on **{{project.namespace}}/{{project.name}}**",
-  "embeds": [
-    {
-      "title": "Comment on {{noteable_type}} #{{issue.iid}}{{merge_request.iid}}",
-      "url": "{{object_attributes.url}}",
-      "description": "**Author:** {{user.name}}\n**Comment:** {{object_attributes.note}}",
-      "color": 10181046,
-      "footer": {
-        "text": "{{project.namespace}}/{{project.name}}"
-      }
-    }
-  ]
-}
-```
