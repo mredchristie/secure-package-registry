@@ -5,8 +5,6 @@ _default:
 
 fix:
   #!/usr/bin/env bash
-  set -e
-
   # Fix markdown formatting with Prettier
   bunx prettier --write "**/*.md"
 
