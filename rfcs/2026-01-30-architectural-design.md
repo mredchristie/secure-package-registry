@@ -1,6 +1,7 @@
 +++
 title = "Architectural Design and Components"
 authors = ["cheongyx@cardiff.ac.uk"]
+status = "review"
 tags = ["system_design"] 
 creation = "2026-01-30"
 +++
@@ -46,14 +47,12 @@ We may also need a proxy that sits in front of the registry to:
 This component will be fairly simple. We need users to be able to log in, request packages to be verified, issue API
 keys, and view the status of current packages.
 
-The current choices we've made are:
+We have chosen Sveltekit as the full-stack framework. This is so that we can integrate `Betterauth` without the the
+security concerns of React Server Components. It is also very close to standard HTML/JS, making it familiar even if you
+haven't used it before.
 
-- A React front-end, mostly due to team familiarity. However, we are **not** using React Server Components due to the
-  numerous historical security issues stemming from still unfixed architectural design.
-- A Go back-end that actually interacts with out system.
-- For authentication, we are considering `Betterauth`. However, that requires a JavaScript back-end. This conflicts with
-  our choice of avoiding React Server Components. **OPEN QUESTION**
-  <!-- This needs to be resolved before RFC is merged -->
+While this does make it a different back-end to the rest of our system, we can make use of RabbitMQ for communication
+such that we are still using a unified interface.
 
 ### Git and package registry polling
 
@@ -132,21 +131,83 @@ When both runners are complete, the collected data will then be analyzed by the 
 everything is done, a report is generated, artifacts uploaded, and depending on whether anything was flagged,
 notifications sent out.
 
-### Stretch goal: Malicious diff detection with AI agents
+### Stretch goal: Malicious diff detection with AI
 
-AI is all the hype right now, and this is how you make an overvalued company. As such, it is under consideration to
-integrate "AI" into our project somehow, to make it more attractive to investors. This would be rather separate from the
-rest of the system, and instead continuously poll the git source (e.g. GitHub), and statically analyze the changes while
-pulling in relevant context to detect whether the change is malicious.
-
-We do not immediately target the implementation of this feature as it will be expensive on a per-unit basis while also
-being vulnerable to a completely different class of exploits (prompt injection).
+Not every malicious behavior is obvious. Some may only trigger in very specific circumstances, which makes it difficult
+to catch, especially when both source and distribution are compromised. One solution is manual code review of every
+commit. However, that is expensive in terms of human resources. These days, AI have gotten close to basic junior level
+developer capability. As such, it should be possible to utilize it for detecting malicious commits given the right
+harness and context.
 
 ## Design Diagram
+
+```mermaid
+flowchart TB
+    subgraph Users["Users"]
+        UI["User interface<br/>(Sveltekit full-stack)"]
+        CLI["Package Managers<br/>(npm, pip, etc.)"]
+    end
+
+    subgraph RegistryLayer["Registry Layer"]
+        Proxy["Registry Proxy<br/>(Auth, Policy, Metrics)"]
+        Registry["Package Registry<br/>(S3 Storage)"]
+    end
+
+    subgraph MessageBroker["Message Broker"]
+        RabbitMQ["RabbitMQ Queue"]
+    end
+
+    subgraph Services["Core Services"]
+        Polling["Git & Registry Polling"]
+        BuildRunner["Reproducible Build Runner<br/>(Podman Containers)"]
+        AnalysisRunner["Behavioral Analysis Runner<br/>(eBPF + ecapture)"]
+    end
+
+    subgraph Analysis["Analysis Engine"]
+        AnomalyDetection["Behavioral Anomaly Detection"]
+        DiffAnalysis["Differential Analysis"]
+    end
+
+    subgraph Storage["Storage"]
+        S3Temp["Temporary S3 Bucket<br/>(Build Artifacts)"]
+        S3Persistent["Persistent Storage<br/>(Reports, Metadata)"]
+    end
+
+    UI --> Proxy
+    CLI --> Proxy
+    Proxy --> Registry
+
+    Polling -->|New version detected| RabbitMQ
+
+    RabbitMQ -->|Trigger build| BuildRunner
+    RabbitMQ -->|Trigger analysis| AnalysisRunner
+
+    BuildRunner -->|Upload artifacts| S3Temp
+    BuildRunner -->|Build complete| RabbitMQ
+
+    AnalysisRunner -->|Behavioral data| RabbitMQ
+
+    RabbitMQ -->|Build + Behavior data| AnomalyDetection
+    RabbitMQ -->|Build artifacts| DiffAnalysis
+
+    AnomalyDetection --> S3Persistent
+    DiffAnalysis --> S3Persistent
+    S3Persistent --> UI
+
+    AnomalyDetection -->|Analysis complete| RabbitMQ
+
+    RabbitMQ -->|Update registry| Registry
+    RabbitMQ -->|Notifications| UI
+
+    style MessageBroker fill:#f9f,stroke:#333,stroke-width:4px,color:#333
+    style RabbitMQ fill:#f9f,stroke:#333,stroke-width:2px,color:#333
+```
 
 ## Open Questions
 
 1. Front-end framework compatible with `Betterauth`?
+
+**Resolved: Choose Sveltekit instead of NextJS, and no Go back-end**
 
 Discord transcript on framework choice:
 
