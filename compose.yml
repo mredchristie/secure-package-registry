@@ -1,0 +1,9 @@
+services:
+  rabbitmq:
+    image: docker.io/rabbitmq:4-management
+    ports:
+      - "127.0.0.1:7001:15672"
+      - "127.0.0.1:5672:5672" # For testing purposes. Comment out in prod.
+    environment:
+      RABBITMQ_DEFAULT_USER: "admin"
+      RABBITMQ_DEFAULT_PASS: "${RABBITMQ_SECRET:-admin}"
