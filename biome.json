@@ -29,6 +29,7 @@
       "src/**",
       "*.ts",
       "*.json",
+      "*.jsonc",
       "!**/crates",
       "!**/dist",
       "!**/packages/@biomejs/backend-jsonrpc/src/workspace.ts",
