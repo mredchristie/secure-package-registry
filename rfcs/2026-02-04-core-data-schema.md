@@ -3,56 +3,60 @@ title = "Core data requirements and backing schema"
 author = "cheongyx@cardiff.ac.uk"
 reviewer = []
 date = "2026-02-04"
-status = "draft"
+status = "review"
 +++
 
 ## Scope
 
-This RFC defines only the core data, defined as data directly visible to the user. The core of our product is the
-package registry. The data we thus need is therefore:
+This RFC defines the **core data** exposed to users via the UI and API. Core data excludes implementation details (e.g.,
+raw syscall statistics, build logs) used internally for behavioral analysis.
 
-1. Information about packages we have in the registry
-2. Their status in terms of security
+**In scope**: Package metadata, security verification tags, maintainer notes **Out of scope (MVP)**: Usage statistics,
+dependency graphs, audit logs
 
-There are different ways to verify a package's security which may grow over time. We want to accomodate that generically
-to allow for that growth without changing our schema often.
+## Requirements
 
-## Scalability
+### Package-level data
 
-There are a lot of packages on NPM. CI/CD being automated means that we may have high load even with a low number of
-users.
+| Field                    | Description                                               |
+| ------------------------ | --------------------------------------------------------- |
+| `identifier`             | Upstream package name (e.g., `express`, `lodash`)         |
+| `ecosystem`              | Registry type: npm, go, cargo, pypi                       |
+| `latest_version`         | Most recent verified version                              |
+| `maintainer_trust_level` | **Open question**                                         |
+| `versions`               | List of all tracked versions (stored as separate records) |
 
-To solve this problem, Command Query Responsibility Segregation is probably a good idea to avoid recomputation. Reads
-are gonna be much more common than writes so we can take the performance hit of more upfront computation.
+### Version-level data
 
-## Data requirements
+| Field                | Description                             |
+| -------------------- | --------------------------------------- |
+| `version`            | Semantic version string                 |
+| `source_url`         | Git repository URL                      |
+| `source_tag`         | Git tag (if release created)            |
+| `source_commit_hash` | Specific commit for reproducibility     |
+| `maintainer_notes`   | Human-reviewed explanations of flags    |
+| `tags`               | Key-value security verification results |
 
-### Package data
+### Tag schema
 
-- Package identifier: Same as whatever is used upstream.
-- Available versions
-- Ecosystem (NPM, Go, PyPi, etc.)
-- Maintainer trust level: This should define whether the package is maintained by highly trusted corporations, or
-  anonymous individuals. Cyber Resilience Act by the EU is a good benchmark for this and a compliance selling point.
-- Latest version (and associated metadata directly embedded)
+Tags store verification results with typed values:
 
-### Package version data
+```plain
+reproducible: boolean      -- Build matches published artifact
+behavior_clean: boolean    -- No suspicious runtime behavior
+cve_count: integer         -- Number of known CVEs
+anomaly_score: number      -- 0.0-1.0 behavioral anomaly severity
+is_trusted: boolean
+```
 
-- Verification tags (e.g. Build reproducible, behavior clean, no CVEs, source code analyzed). **Open questions** include
-  the data type of the tags. For example, it can be nil for not run, true for passing, and false for failing. However,
-  we also need to consider whether such an overall assessment is good enough. Behavioral anomalies may differ in
-  severity, and we might want a way to represent that, either as a decimal or otherwise.
-- Maintainer notes: All flags are meant to be reviewed by humans as to not push out false positives which may damage the
-  reputation of other developers. These should be included as part of the data shown to users as an explanation for the
-  hard data.
-- Whether or not to block a package install should be calculated on the fly at the edge based on user settings. All data
-  required for the calculation should be available from the aggregated version data. Since these are per-user and cheap
-  to calculate, it will not be part of the core data requirement.
+This is both for display and for calculating whether an attempted package pull should be blocked.
 
-## Proposal
+**For the MVP, we only need to care about the "is_trusted" flag. Determining whether or not to pull based on rules is a
+future feature**
+
+## Database Schema
 
 ```sql
-
 CREATE TYPE ECOSYSTEM AS ENUM ('npm', 'go', 'cargo', 'pypi');
 
 CREATE TABLE packages (
@@ -60,7 +64,7 @@ CREATE TABLE packages (
     identifier TEXT UNIQUE NOT NULL,
     ecosystem ECOSYSTEM NOT NULL,
     latest_version TEXT NOT NULL,
-    maintainer_trust_level INTEGER DEFAULT 0, -- 0=unknown, higher=better
+    maintainer_trust_level INTEGER DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -69,15 +73,14 @@ CREATE INDEX IF NOT EXISTS idx_packages_lookup ON packages (identifier, ecosyste
 
 CREATE TABLE package_versions (
     id SERIAL PRIMARY KEY,
-    package_id INTEGER NOT NULL,
+    package_id INTEGER NOT NULL REFERENCES packages(id) ON DELETE CASCADE,
     version TEXT NOT NULL,
-    source_url TEXT NOT NULL, -- Git URL (GitHub/GitLab/etc) that we can pull from
-    source_tag TEXT, -- Optional git tag. Auto generated by GitHub releases. May not exist if release not made
-    source_commit_hash TEXT, -- Optional. Specific commit the package is built from.
+    source_url TEXT NOT NULL,
+    source_tag TEXT,
+    source_commit_hash TEXT,
     maintainer_notes TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (package_id) REFERENCES packages(id) ON DELETE CASCADE,
     UNIQUE(package_id, version)
 );
 
@@ -94,20 +97,62 @@ CREATE TABLE package_tag_types (
 );
 
 CREATE TABLE package_version_tags (
-    package_version INTEGER NOT NULL,
-    tag_type INTEGER NOT NULL,
-    value JSONB, -- Stores boolean, integer, or numeric scores directly
+    package_version INTEGER NOT NULL REFERENCES package_versions(id) ON DELETE CASCADE,
+    tag_type INTEGER NOT NULL REFERENCES package_tag_types(id) ON DELETE CASCADE,
+    value JSONB,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (package_version, tag_type),
-    FOREIGN KEY (package_version) REFERENCES package_versions(id) ON DELETE CASCADE,
-    FOREIGN KEY (tag_type) REFERENCES package_tag_types(id) ON DELETE CASCADE
+    PRIMARY KEY (package_version, tag_type)
 );
 ```
 
-The main thing we're pulling are tags for the specific package version CI/CD is trying to pull down to do a check that
-it matches security rules set by the user. The user rules themselves can be part of the authentication JWT.
+## Cache Format
 
-The request will contain package identifier and version string. We will need to select from packages table to get
-package id, then versions to get version id, and finally, tags associated with that version. We can cache this as in a
-key-value store, mapping the fully qualified string to a JSON array of tags and their associated values.
+For high-throughput lookups, cache package version data as JSON:
+
+**Cache key**: `{ecosystem}:{identifier}@{version}`  
+**Example**: `npm:express@4.18.0`
+
+**Cached value**:
+
+```json
+{
+  "identifier": "express",
+  "ecosystem": "npm",
+  "version": "4.18.0",
+  "latest": false,
+  "source": {
+    "url": "https://github.com/expressjs/express",
+    "tag": "v4.18.0",
+    "commit": "a4bd437"
+  },
+  "trust_level": 5,
+  "maintainer_notes": "No issues detected in manual review",
+  "tags": {
+    "reproducible": true,
+    "behavior_clean": true,
+    "cve_count": 0,
+    "anomaly_score": 0.02,
+    "is_trusted": true // Only care about this for now
+  }
+}
+```
+
+This format allows frontend development against mock data before the backend API is complete.
+
+## Assumptions
+
+- Package versions are immutable once published
+- Git URLs may change between versions (stored per-version)
+- Tags are generated by automated analysis and employee review
+- Schema changes use `ALTER` commands with zero-downtime deployment
+
+## Scalability Considerations
+
+High read volume from CI/CD pipelines suggests:
+
+- Cache frequently accessed package versions (see Cache Format above)
+- Use read replicas for the registry API
+- Separate write-heavy analysis data from read-heavy metadata
+
+CQRS pattern recommended: pre-compute security aggregates during analysis, serve cached results to users.
