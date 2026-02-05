@@ -1,7 +1,7 @@
 +++
 title = "Reviewing OSS Registry Options"
 author = ["readb5@cardiff.ac.uk"]
-reviewers = []
+reviewers = ["cheongyx@cardiff.ac.uk"]
 date = "2026-02-02"
 status = "Draft"
 +++
@@ -10,6 +10,9 @@ status = "Draft"
 
 Exploring the various open-source package registry options available, suitable for package ecosystems, primarily NPM,
 PyPI and Go Modules, to determine the best fit for our needs.
+
+The final decision made is using Gitea's package registry, which supports all three ecosystems while being more
+lightweight and easier to manage than GitLab's package registry. S3 support is provided via MinIO.
 
 ## Problem
 
@@ -141,6 +144,19 @@ most reputable open source vendor.
 - Not super widely adopted, smaller community, may be more fragile (Although RedHat is quite reputable).
 - Written in Python which may be slower than other options. Although this may not be a big issue for our use case.
 
+## Note on Access Control
+
+All evaluated options support access control and authentication, our access control will be implemented at the network
+level, so we don't need to worry about this aspect when comparing options. However, it is worth noting that tight access
+control may actually be an impediment to implementing the proxy if we have to implement token cycling.
+
+## Note on Package Upload
+
+All of these options support package upload via the standardized APIs (NPM and PyPI), such as `npm publish`. This means
+that if we need to switch to a different registry in the future, it should be relatively straightforward to do so
+without having to change our automation code significantly. This is a significant advantage over proprietary solutions
+such as JFrog Artifactory, which was excluded from consideration for this reason.
+
 ## Recommendation
 
 **Gitea** is the recommended option.
@@ -154,14 +170,19 @@ adhere to the standardized NPM and PyPI protocols, making future migration relat
 proprietary alternatives such as JFrog Artifactory, which was excluded for this reason).
 
 While Gitea's package registry is part of a broader platform, initial deployment testing confirmed its resource
-footprint is acceptable for our needs.
+footprint is acceptable for our needs (only 180MB of memory used).
 
 ## Open Questions
 
-Are any other ecosystems required apart from NPM, PyPI and Go?
+1. Are any other ecosystems required apart from NPM, PyPI and Go?
 
-Are there some advantages of using GitLab's package registry (considering we are already using GitLab for git hosting)
-that outweigh its disadvantages?
+2. Are there some advantages of using GitLab's package registry (considering we are already using GitLab for git
+   hosting) that outweigh its disadvantages?
+
+### Answered Questions
+
+1. No, since we will have to manage our own GitLab instance & can't just reuse the University's. (via
+   <cheongyx@cardiff.ac.uk>)
 
 ## References
 
