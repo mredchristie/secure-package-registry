@@ -1,8 +1,7 @@
 +++
 title = "Architectural Design and Components"
 authors = ["cheongyx@cardiff.ac.uk"]
-status = "review"
-tags = ["system_design"] 
+reviewers = ["ReadB5@cardiff.ac.uk"]
 creation = "2026-01-30"
 +++
 
