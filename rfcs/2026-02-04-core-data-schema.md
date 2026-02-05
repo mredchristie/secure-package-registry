@@ -156,3 +156,12 @@ High read volume from CI/CD pipelines suggests:
 - Separate write-heavy analysis data from read-heavy metadata
 
 CQRS pattern recommended: pre-compute security aggregates during analysis, serve cached results to users.
+
+## Possible confusions
+
+By "tag", we mean metadata about the package put forth by us (secure package registry), and not version aliases such as
+"latest/beta/next". These tags allow us to expose some additional data to the user in regards to security beyond a
+boolean value. Some customers, such as enterprise, may have different requirements on trust based on this data.
+
+We will not support version aliases as they are fundamentally insecure and are a source of a lot of supply chain
+attacks. Version pinning is recommended.
