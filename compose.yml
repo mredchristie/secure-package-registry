@@ -67,7 +67,7 @@ services:
       # Uncomment when necessary
       # - ./data/postgres:/var/lib/postgresql:Z
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U gitea -d gitea"]
+      test: ["CMD-SHELL", "pg_isready -U gitea -d gitea -h localhost"]
       interval: 5s
       timeout: 5s
       retries: 5
