@@ -23,8 +23,6 @@ services:
     volumes:
       # Uncomment when necessary. No persistence necessary for testing phase
       # - ./data/gitea:/data:Z
-      - /usr/share/zoneinfo/UTC:/etc/timezone:ro
-      - /etc/localtime:/etc/localtime:ro
       - ./infra/gitea-custom/:/data/gitea/custom:z
     ports:
       - "127.0.0.1:7002:3000" # TODO: How should we deal with ssh? Necessary?
