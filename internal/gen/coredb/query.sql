@@ -18,6 +18,7 @@ WHERE p.ecosystem = $1
 -- name: GetPackageVersionTags :many
 SELECT 
     ptt.label,
+    ptt.value_type,
     pvt.value
 FROM packages p
 JOIN package_versions pv ON pv.package_id = p.id

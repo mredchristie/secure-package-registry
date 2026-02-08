@@ -85,7 +85,7 @@ CREATE TABLE package_versions (
 
 CREATE INDEX IF NOT EXISTS idx_versions_lookup ON package_versions (package_id, version);
 
-CREATE TYPE PKG_VTYPE AS ENUM ('integer', 'boolean');
+CREATE TYPE PKG_VTYPE AS ENUM ('integer', 'boolean', 'float');
 
 CREATE TABLE package_tag_types (
     id SERIAL PRIMARY KEY,

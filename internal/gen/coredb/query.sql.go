@@ -3,7 +3,7 @@
 //   sqlc v1.30.0
 // source: query.sql
 
-package pkgdb
+package coredb
 
 import (
 	"context"
@@ -67,6 +67,7 @@ func (q *Queries) GetPackageVersion(ctx context.Context, arg GetPackageVersionPa
 const getPackageVersionTags = `-- name: GetPackageVersionTags :many
 SELECT 
     ptt.label,
+    ptt.value_type,
     pvt.value
 FROM packages p
 JOIN package_versions pv ON pv.package_id = p.id
@@ -84,8 +85,9 @@ type GetPackageVersionTagsParams struct {
 }
 
 type GetPackageVersionTagsRow struct {
-	Label string
-	Value []byte
+	Label     string
+	ValueType PkgVtype
+	Value     []byte
 }
 
 func (q *Queries) GetPackageVersionTags(ctx context.Context, arg GetPackageVersionTagsParams) ([]GetPackageVersionTagsRow, error) {
@@ -97,7 +99,7 @@ func (q *Queries) GetPackageVersionTags(ctx context.Context, arg GetPackageVersi
 	var items []GetPackageVersionTagsRow
 	for rows.Next() {
 		var i GetPackageVersionTagsRow
-		if err := rows.Scan(&i.Label, &i.Value); err != nil {
+		if err := rows.Scan(&i.Label, &i.ValueType, &i.Value); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

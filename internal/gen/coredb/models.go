@@ -2,7 +2,7 @@
 // versions:
 //   sqlc v1.30.0
 
-package pkgdb
+package coredb
 
 import (
 	"database/sql/driver"
@@ -60,6 +60,7 @@ type PkgVtype string
 const (
 	PkgVtypeInteger PkgVtype = "integer"
 	PkgVtypeBoolean PkgVtype = "boolean"
+	PkgVtypeFloat   PkgVtype = "float"
 )
 
 func (e *PkgVtype) Scan(src interface{}) error {

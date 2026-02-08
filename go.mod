@@ -1,4 +1,4 @@
-module git.duti.dev/acheong08/secure-package-registry
+module secure-package-registry
 
 go 1.25.6
 
