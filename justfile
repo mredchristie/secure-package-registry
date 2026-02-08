@@ -44,5 +44,9 @@ check:
 test:
   go test ./...
 
+generate:
+  #!/usr/bin/env bash
+  go generate ./...
+
 help:
   @just --help

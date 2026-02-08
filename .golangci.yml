@@ -13,15 +13,6 @@ output:
 
 linters:
   enable-all: true
-  # disable:
-  #   - exhaustruct
-  #   - gochecknoglobals
-  #   - gochecknoinits
-  #   - gomnd
-  #   - lll
-  #   - varnamelen
-  #   - wrapcheck
-  #   - wsl
 
 linters-settings:
   gofumpt:
