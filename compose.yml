@@ -96,7 +96,7 @@ services:
       # Uncomment when necessary
       # - ./data/valkey:/data:Z
   core_db:
-    image: docker.io/library/postgres:18-alpine
+    image: docker.io/library/postgres:18
     restart: always
     environment:
       - POSTGRES_USER=core
@@ -110,3 +110,18 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+  core-svc:
+    build:
+      context: .
+      dockerfile: cmd/core-svc/Containerfile
+    image: secure-registry/core-svc:latest
+    depends_on:
+      core_db:
+        condition: service_healthy
+    environment:
+      - DB_HOST=core_db
+      - DB_USER=core
+      - DB_PASSWORD=${DB_PASSWORD:-PleaseChangeMe}
+      - DB_NAME=secure_registry
+      - LOG_LEVEL=info
+    restart: unless-stopped
