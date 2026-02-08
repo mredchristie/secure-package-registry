@@ -1,0 +1,8 @@
+DROP TABLE IF EXISTS package_version_tags;
+DROP TABLE IF EXISTS package_tag_types;
+DROP TYPE IF EXISTS PKG_VTYPE;
+DROP INDEX IF EXISTS idx_versions_lookup;
+DROP TABLE IF EXISTS package_versions;
+DROP INDEX IF EXISTS idx_packages_lookup;
+DROP TABLE IF EXISTS packages;
+DROP TYPE IF EXISTS ECOSYSTEM;

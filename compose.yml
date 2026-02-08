@@ -95,3 +95,18 @@ services:
     # volumes:
       # Uncomment when necessary
       # - ./data/valkey:/data:Z
+  core_db:
+    image: docker.io/library/postgres:18-alpine
+    restart: always
+    environment:
+      - POSTGRES_USER=core
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-PleaseChangeMe}
+      - POSTGRES_DB=secure_registry
+    # volumes:
+      # Uncomment when necessary
+      # - ./data/core_db:/var/lib/postgresql/data:Z
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U core -d secure_registry -h localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
