@@ -7,6 +7,8 @@ tool (
 	mvdan.cc/gofumpt
 )
 
+require github.com/rs/zerolog v1.34.0
+
 require (
 	4d63.com/gocheckcompilerdirectives v1.3.0 // indirect
 	4d63.com/gochecknoglobals v0.2.2 // indirect
