@@ -3,7 +3,6 @@ title = "Reviewing OSS Registry Options"
 author = ["readb5@cardiff.ac.uk"]
 reviewers = ["cheongyx@cardiff.ac.uk"]
 date = "2026-02-02"
-status = "Draft"
 +++
 
 ## Summary

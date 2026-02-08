@@ -3,7 +3,6 @@ title = "Core data requirements and backing schema"
 author = "cheongyx@cardiff.ac.uk"
 reviewer = ["ChristieE1@cardiff.ac.uk"]
 date = "2026-02-04"
-status = "review"
 +++
 
 ## Scope

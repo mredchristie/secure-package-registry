@@ -3,7 +3,6 @@ title = "RFC Guidelines and Process"
 author = ["cheongyx@cardiff.ac.uk"]
 reviewers = ["ReadB5@cardiff.ac.uk", "ChristieE1@cardiff.ac.uk"]
 date = "2026-01-28"
-status = "complete"
 +++
 
 ## Summary
@@ -69,7 +68,6 @@ reviewers = ["me@example.com", "rando@example.com"]
 tags = ["reproducible_builds", "behavioral_detection"] # Components of the system. Specific tags are to be added in a later RFC on architecture and components
 creation = "2026-01-27"
 last_update = "2026-01-29"
-status = "draft" # draft -> review -> complete -> superseded | declined. Approved is not a valid status as that is implied by presence in the repository.
 superseded_by = ["2026-01-29-other-rfc.md"] # Optional
 depends_on = ["2026-01-01-discord.md"] # Optional
 +++
@@ -140,7 +138,7 @@ breaking changes are allowed before implementation as long as no other RFC has b
 behavior or interfaces.
 
 Instead, RFCs are superseded by new documents. When an RFC is superseded, we can move them to a dedicated superseded
-RFCs folder as to not pollute context. The old RFC should clearly reference which RFC it has been superseded by.
+RFCs directory as to not pollute context. The old RFC should clearly reference which RFC it has been superseded by.
 
 Example flow:
 
@@ -189,4 +187,6 @@ Exceptions will be made during emergencies. We can work out better strategies as
 
 ## Change Log
 
-N/A
+- Removed status tag, since that is kept track of by GitLab itself. Instead, we either have no status, or "implemented".
+  Keeping track of which RFCs have been implemented in code is important as it means it means the RFC will be frozen &
+  major changes requiring a superseding RFC.
