@@ -47,7 +47,22 @@ ON CONFLICT (identifier) DO UPDATE SET
     updated_at = CURRENT_TIMESTAMP
 RETURNING id;
 
--- name: InsertPackageVersion :exec
+-- name: InsertPackageVersion :one
 INSERT INTO package_versions (package_id, version, source_url)
 VALUES ($1, $2, $3)
-ON CONFLICT (package_id, version) DO NOTHING;
+ON CONFLICT (package_id, version) DO NOTHING
+RETURNING id;
+
+-- name: InsertTagType :one
+INSERT INTO package_tag_types (label, description, value_type)
+VALUES ($1, $2, $3)
+ON CONFLICT (label) DO UPDATE SET
+    description = EXCLUDED.description,
+    value_type = EXCLUDED.value_type
+RETURNING id;
+
+-- name: InsertPackageTag :exec
+INSERT INTO package_version_tags (package_version, tag_type, value)
+VALUES ($1, $2, $3)
+ON CONFLICT (package_version, tag_type) DO UPDATE SET
+    value = EXCLUDED.value;

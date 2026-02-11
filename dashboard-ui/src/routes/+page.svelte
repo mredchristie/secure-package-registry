@@ -26,9 +26,20 @@
     maintainer_notes: string;
     tags: Array<{
       label: string;
-      value_type: string;
-      data: string;
+      value_type: 'boolean' | 'integer' | 'float';
+      data: string; // base64 encoded JSON
     }>;
+  }
+  
+  // Decode base64 and parse JSON value
+  function decodeTagValue(data: string): string {
+    try {
+      const decoded = atob(data);
+      const parsed = JSON.parse(decoded);
+      return String(parsed);
+    } catch (e) {
+      return data;
+    }
   }
   
   let searchQuery = '';
@@ -166,7 +177,7 @@
               {#each selectedPackage.tags as tag}
                 <div class="tag-item">
                   <span class="tag-label">{tag.label}</span>
-                  <span class="tag-type">({tag.value_type})</span>
+                  <span class="tag-value">{decodeTagValue(tag.data)}</span>
                 </div>
               {/each}
             </div>
@@ -492,8 +503,9 @@
     color: #1976d2;
   }
   
-  .tag-type {
-    color: #666;
-    font-size: 0.875rem;
+  .tag-value {
+    font-weight: 500;
+    color: #333;
   }
+  
 </style>

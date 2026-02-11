@@ -132,10 +132,29 @@ func (q *Queries) InsertPackage(ctx context.Context, arg InsertPackageParams) (i
 	return id, err
 }
 
-const insertPackageVersion = `-- name: InsertPackageVersion :exec
+const insertPackageTag = `-- name: InsertPackageTag :exec
+INSERT INTO package_version_tags (package_version, tag_type, value)
+VALUES ($1, $2, $3)
+ON CONFLICT (package_version, tag_type) DO UPDATE SET
+    value = EXCLUDED.value
+`
+
+type InsertPackageTagParams struct {
+	PackageVersion int32
+	TagType        int32
+	Value          []byte
+}
+
+func (q *Queries) InsertPackageTag(ctx context.Context, arg InsertPackageTagParams) error {
+	_, err := q.db.Exec(ctx, insertPackageTag, arg.PackageVersion, arg.TagType, arg.Value)
+	return err
+}
+
+const insertPackageVersion = `-- name: InsertPackageVersion :one
 INSERT INTO package_versions (package_id, version, source_url)
 VALUES ($1, $2, $3)
 ON CONFLICT (package_id, version) DO NOTHING
+RETURNING id
 `
 
 type InsertPackageVersionParams struct {
@@ -144,9 +163,33 @@ type InsertPackageVersionParams struct {
 	SourceUrl string
 }
 
-func (q *Queries) InsertPackageVersion(ctx context.Context, arg InsertPackageVersionParams) error {
-	_, err := q.db.Exec(ctx, insertPackageVersion, arg.PackageID, arg.Version, arg.SourceUrl)
-	return err
+func (q *Queries) InsertPackageVersion(ctx context.Context, arg InsertPackageVersionParams) (int32, error) {
+	row := q.db.QueryRow(ctx, insertPackageVersion, arg.PackageID, arg.Version, arg.SourceUrl)
+	var id int32
+	err := row.Scan(&id)
+	return id, err
+}
+
+const insertTagType = `-- name: InsertTagType :one
+INSERT INTO package_tag_types (label, description, value_type)
+VALUES ($1, $2, $3)
+ON CONFLICT (label) DO UPDATE SET
+    description = EXCLUDED.description,
+    value_type = EXCLUDED.value_type
+RETURNING id
+`
+
+type InsertTagTypeParams struct {
+	Label       string
+	Description pgtype.Text
+	ValueType   PkgVtype
+}
+
+func (q *Queries) InsertTagType(ctx context.Context, arg InsertTagTypeParams) (int32, error) {
+	row := q.db.QueryRow(ctx, insertTagType, arg.Label, arg.Description, arg.ValueType)
+	var id int32
+	err := row.Scan(&id)
+	return id, err
 }
 
 const searchPackages = `-- name: SearchPackages :many
