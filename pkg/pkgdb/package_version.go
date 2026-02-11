@@ -13,7 +13,7 @@ import (
 // PackageVersion represents a package version with metadata and tags
 type PackageVersion struct {
 	Identifier      string             `json:"identifier"`
-	Ecosystem       string             `json:"ecosystem"`
+	Ecosystem       Ecosystem          `json:"ecosystem" enum:"npm,go,cargo,pypi"`
 	Version         string             `json:"version"`
 	Latest          bool               `json:"latest"`
 	Source          Source             `json:"source"`
@@ -79,7 +79,7 @@ func (c *Client) GetPackageVersion(ctx context.Context, ecosystem Ecosystem, ide
 	// Construct PackageVersion
 	pv := &PackageVersion{
 		Identifier: versionRow.Identifier,
-		Ecosystem:  versionRow.PEcosystem,
+		Ecosystem:  Ecosystem(versionRow.PEcosystem),
 		Version:    versionRow.Version,
 		Latest:     versionRow.Latest,
 		Source: Source{

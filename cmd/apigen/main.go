@@ -25,6 +25,8 @@ func main() {
 	if err := generateSchemas(schemas, enumTypes,
 		&pkgdb.PackageVersion{},
 		&pkgdb.TagError{},
+		&pkgdb.PackageSummary{},
+		&pkgdb.SearchResult{},
 	); err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating schemas: %v\n", err)
 		os.Exit(1)
@@ -32,6 +34,9 @@ func main() {
 
 	// Add enum schemas for types discovered with enum tags
 	addEnumSchemas(schemas, enumTypes)
+
+	// Replace inline enums with $ref to named enum schemas
+	deduplicateEnumRefs(schemas)
 
 	// Create OpenAPI document
 	doc := &openapi3.T{
@@ -157,4 +162,43 @@ func addEnumSchemas(schemas openapi3.Schemas, enumTypes map[string][]string) {
 			},
 		}
 	}
+}
+
+// deduplicateEnumRefs replaces inline enum definitions with $ref to named enum schemas
+func deduplicateEnumRefs(schemas openapi3.Schemas) {
+	// Build a map of enum signature -> schema name
+	enumSigs := make(map[string]string)
+	for name, schemaRef := range schemas {
+		if schemaRef.Value != nil && len(schemaRef.Value.Enum) > 0 {
+			sig := buildEnumSig(schemaRef.Value.Enum)
+			enumSigs[sig] = name
+		}
+	}
+
+	// Replace inline enums with $ref in all schema properties
+	for _, schemaRef := range schemas {
+		if schemaRef.Value == nil || schemaRef.Value.Properties == nil {
+			continue
+		}
+		for _, propRef := range schemaRef.Value.Properties {
+			if propRef.Value == nil || len(propRef.Value.Enum) == 0 {
+				continue
+			}
+			sig := buildEnumSig(propRef.Value.Enum)
+			if refName, ok := enumSigs[sig]; ok {
+				// Replace with $ref to the named enum schema
+				propRef.Value.Enum = nil
+				propRef.Ref = "#/components/schemas/" + refName
+			}
+		}
+	}
+}
+
+// buildEnumSig creates a signature string from enum values for comparison
+func buildEnumSig(enum []any) string {
+	values := make([]string, len(enum))
+	for i, v := range enum {
+		values[i] = fmt.Sprintf("%v", v)
+	}
+	return strings.Join(values, ",")
 }

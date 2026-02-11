@@ -1,9 +1,25 @@
 components:
     schemas:
+        Ecosystem:
+            enum:
+                - npm
+                - go
+                - cargo
+                - pypi
+            type: string
+        PackageSummary:
+            properties:
+                ecosystem:
+                    $ref: '#/components/schemas/Ecosystem'
+                identifier:
+                    type: string
+                latest_version:
+                    type: string
+            type: object
         PackageVersion:
             properties:
                 ecosystem:
-                    type: string
+                    $ref: '#/components/schemas/Ecosystem'
                 identifier:
                     type: string
                 latest:
@@ -33,6 +49,13 @@ components:
                 - boolean
                 - float
             type: string
+        SearchResult:
+            properties:
+                items:
+                    items:
+                        $ref: '#/components/schemas/PackageSummary'
+                    type: array
+            type: object
         Source:
             properties:
                 commit:
@@ -58,11 +81,7 @@ components:
                 label:
                     type: string
                 value_type:
-                    enum:
-                        - integer
-                        - boolean
-                        - float
-                    type: string
+                    $ref: '#/components/schemas/PkgVtype'
             type: object
 info:
     description: API for querying package information and metadata
