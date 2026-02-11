@@ -110,6 +110,45 @@ func (q *Queries) GetPackageVersionTags(ctx context.Context, arg GetPackageVersi
 	return items, nil
 }
 
+const insertPackage = `-- name: InsertPackage :one
+INSERT INTO packages (identifier, ecosystem, latest_version)
+VALUES ($1, $2, $3)
+ON CONFLICT (identifier) DO UPDATE SET
+    latest_version = EXCLUDED.latest_version,
+    updated_at = CURRENT_TIMESTAMP
+RETURNING id
+`
+
+type InsertPackageParams struct {
+	Identifier    string
+	Ecosystem     Ecosystem
+	LatestVersion string
+}
+
+func (q *Queries) InsertPackage(ctx context.Context, arg InsertPackageParams) (int32, error) {
+	row := q.db.QueryRow(ctx, insertPackage, arg.Identifier, arg.Ecosystem, arg.LatestVersion)
+	var id int32
+	err := row.Scan(&id)
+	return id, err
+}
+
+const insertPackageVersion = `-- name: InsertPackageVersion :exec
+INSERT INTO package_versions (package_id, version, source_url)
+VALUES ($1, $2, $3)
+ON CONFLICT (package_id, version) DO NOTHING
+`
+
+type InsertPackageVersionParams struct {
+	PackageID int32
+	Version   string
+	SourceUrl string
+}
+
+func (q *Queries) InsertPackageVersion(ctx context.Context, arg InsertPackageVersionParams) error {
+	_, err := q.db.Exec(ctx, insertPackageVersion, arg.PackageID, arg.Version, arg.SourceUrl)
+	return err
+}
+
 const searchPackages = `-- name: SearchPackages :many
 SELECT 
     p.identifier,

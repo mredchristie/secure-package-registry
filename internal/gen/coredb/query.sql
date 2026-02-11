@@ -38,3 +38,16 @@ WHERE p.identifier ILIKE '%' || sqlc.arg(query) || '%'
   AND (sqlc.narg(ecosystem)::ECOSYSTEM IS NULL OR p.ecosystem = sqlc.narg(ecosystem)::ECOSYSTEM)
 ORDER BY p.identifier
 LIMIT sqlc.arg(page_size) OFFSET (sqlc.arg(page) - 1) * sqlc.arg(page_size);
+
+-- name: InsertPackage :one
+INSERT INTO packages (identifier, ecosystem, latest_version)
+VALUES ($1, $2, $3)
+ON CONFLICT (identifier) DO UPDATE SET
+    latest_version = EXCLUDED.latest_version,
+    updated_at = CURRENT_TIMESTAMP
+RETURNING id;
+
+-- name: InsertPackageVersion :exec
+INSERT INTO package_versions (package_id, version, source_url)
+VALUES ($1, $2, $3)
+ON CONFLICT (package_id, version) DO NOTHING;
