@@ -23,7 +23,7 @@ services:
     volumes:
       # Uncomment when necessary. No persistence necessary for testing phase
       # - ./data/gitea:/data:Z
-      - ./infra/gitea-custom/:/data/gitea/custom:z
+      - ./infra/gitea-custom/:/data/gitea/custom:ro
     ports:
       - "127.0.0.1:7002:3000" # TODO: How should we deal with ssh? Necessary?
     entrypoint: ["/bin/sh","-c"]
