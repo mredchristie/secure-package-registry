@@ -18,7 +18,7 @@ fix:
   bunx @biomejs/biome check --write
 
   # Lint and fix markdown with markdownlint-cli2
-  bunx markdownlint-cli2 "**/*.md" --fix
+  git ls-files "*.md" | xargs -r bunx markdownlint-cli2 --fix
 
 
 check:
@@ -35,7 +35,7 @@ check:
   bunx @biomejs/biome check
 
   # Check markdown
-  bunx markdownlint-cli2 "**/*.md"
+  git ls-files "*.md" | xargs -r bunx markdownlint-cli2
 
 test:
   go test ./...
