@@ -29,19 +29,14 @@ components:
                 source:
                     $ref: '#/components/schemas/Source'
                 tags:
-                    $ref: '#/components/schemas/PackageVersionTags'
+                    items:
+                        $ref: '#/components/schemas/TagInfo'
+                    type: array
                 trust_level:
                     format: int32
                     type: integer
                 version:
                     type: string
-            type: object
-        PackageVersionTags:
-            properties:
-                Tags:
-                    items:
-                        $ref: '#/components/schemas/TagInfo'
-                    type: array
             type: object
         PkgVtype:
             enum:

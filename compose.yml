@@ -126,9 +126,6 @@ services:
       - LOG_LEVEL=info
       - EXTERNAL_PORT=8080
       - INTERNAL_PORT=8081
-    expose:
-      - "8080"
-      - "8081"
     restart: unless-stopped
 
   caddy:
