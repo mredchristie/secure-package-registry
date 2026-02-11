@@ -34,6 +34,9 @@ check:
   # Check JS/TS
   bunx @biomejs/biome check
 
+  # Run checks in dashboard
+  cd ./dashboard-ui/ && bun ci && bun run check && cd ..
+
   # Check markdown
   git ls-files "*.md" | xargs -r bunx markdownlint-cli2
 
