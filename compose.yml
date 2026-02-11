@@ -29,8 +29,22 @@ services:
     entrypoint: ["/bin/sh","-c"]
     command:
       - | # Will run every time on startup but commands are idempotent so no worries
-        echo 'su-exec git /usr/local/bin/gitea migrate' >> /etc/s6/gitea/setup
-        echo 'su-exec git /usr/local/bin/gitea admin user create --username '${GITEA_ADMIN}' --password '${GITEA_ADMIN_PASSWORD}' --email admin@local --admin --must-change-password=false' >> /etc/s6/gitea/setup
+        apk update
+        apk add valkey-cli
+        cat >> /etc/s6/gitea/setup << 'GITEA_SETUP'
+        su-exec git /usr/local/bin/gitea migrate
+        su-exec git /usr/local/bin/gitea admin user create \
+          --username '${GITEA_ADMIN_USERNAME}' \
+          --password '${GITEA_ADMIN_PASSWORD}' \
+          --email admin@local \
+          --admin \
+          --must-change-password=false
+        su-exec git /usr/local/bin/gitea admin user generate-access-token \
+          --username '${GITEA_ADMIN_USERNAME}' \
+          --token-name "spr-admin-token" \
+          --scopes "all" | sed "s/^.*: //" >/tmp/spr-admin-token.txt
+        valkey-cli -h valkey_db -p 6379 SETNX gitea:tokens:admin "$(cat /tmp/spr-admin-token.txt)"
+        GITEA_SETUP
         /usr/bin/entrypoint /usr/bin/s6-svscan /etc/s6
     depends_on:
       gitea_db:
@@ -69,3 +83,15 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+  valkey_db:
+    image: docker.io/valkey/valkey:9.0.2-alpine
+    environment:
+      - ALLOW_EMPTY_PASSWORD=true
+    healthcheck:
+      test: ["CMD", "valkey-cli", "-a", "${VALKEY_PASSWORD}", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    # volumes:
+      # Uncomment when necessary
+      # - ./data/valkey:/data:Z
