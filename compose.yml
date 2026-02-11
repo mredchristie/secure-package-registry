@@ -124,4 +124,19 @@ services:
       - DB_PASSWORD=${DB_PASSWORD:-PleaseChangeMe}
       - DB_NAME=secure_registry
       - LOG_LEVEL=info
+      - EXTERNAL_PORT=8080
+      - INTERNAL_PORT=8081
+    expose:
+      - "8080"
+      - "8081"
+    restart: unless-stopped
+
+  caddy:
+    image: docker.io/caddy:2-alpine
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - core-svc
     restart: unless-stopped
