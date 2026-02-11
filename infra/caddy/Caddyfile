@@ -7,8 +7,7 @@
 		reverse_proxy core-svc:8080
 	}
 
-	# TODO: Add dashboard-ui routing
-	# route /* {
-	#     reverse_proxy dashboard-ui:3000
-	# }
+	route /* {
+		reverse_proxy dashboard-ui:3000
+	}
 }
