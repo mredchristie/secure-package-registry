@@ -114,7 +114,6 @@ services:
     build:
       context: .
       dockerfile: cmd/core-svc/Containerfile
-    image: secure-registry/core-svc:latest
     depends_on:
       core_db:
         condition: service_healthy
@@ -132,7 +131,6 @@ services:
     build:
       context: ./dashboard-ui
       dockerfile: Containerfile
-    image: secure-registry/dashboard-ui:latest
     environment:
       - PORT=3000
       - HOST=0.0.0.0
@@ -153,7 +151,6 @@ services:
     build:
       context: .
       dockerfile: cmd/seed/Containerfile
-    image: secure-registry/seeder:latest
     environment:
       - DATABASE_URL=postgres://core:${DB_PASSWORD:-PleaseChangeMe}@core_db:5432/secure_registry?sslmode=disable
     depends_on:
