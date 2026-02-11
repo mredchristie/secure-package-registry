@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"git.duti.dev/secure-package-registry/internal/gen/coredb"
 	"github.com/jackc/pgx/v5/pgtype"
-	"secure-package-registry/internal/gen/coredb"
 )
 
 // PackageVersion represents a package version with metadata and tags
@@ -69,9 +69,9 @@ func (c *Client) GetPackageVersion(ctx context.Context, ecosystem Ecosystem, ide
 	for _, row := range tagRows {
 		if len(row.Value) > 0 && string(row.Value) != "null" {
 			tagsList = append(tagsList, TagInfo{
-				label:     row.Label,
-				valueType: row.ValueType,
-				data:      row.Value,
+				Label:     row.Label,
+				ValueType: row.ValueType,
+				Data:      row.Value,
 			})
 		}
 	}
@@ -90,7 +90,7 @@ func (c *Client) GetPackageVersion(ctx context.Context, ecosystem Ecosystem, ide
 		TrustLevel:      pgtypeInt4ToInt32(versionRow.TrustLevel),
 		MaintainerNotes: pgtypeTextToString(versionRow.MaintainerNotes),
 		Tags: PackageVersionTags{
-			tags: tagsList,
+			Tags: tagsList,
 		},
 	}
 
@@ -120,14 +120,14 @@ func isNotFoundError(err error) bool {
 
 // PackageVersionTags provides typed accessors for tag values
 type PackageVersionTags struct {
-	tags []TagInfo
+	Tags []TagInfo
 }
 
 // TagInfo holds a tag's value along with its expected type
 type TagInfo struct {
-	label     string
-	valueType coredb.PkgVtype
-	data      []byte
+	Label     string          `json:"label"`
+	ValueType coredb.PkgVtype `json:"value_type" enum:"integer,boolean,float"`
+	Data      []byte          `json:"data"`
 }
 
 // IsTrusted returns whether the package version is trusted
@@ -163,16 +163,16 @@ func (t PackageVersionTags) getBool(key string) (bool, error) {
 	}
 
 	// Validate expected type
-	if tag.valueType != coredb.PkgVtypeBoolean {
+	if tag.ValueType != coredb.PkgVtypeBoolean {
 		return false, &TagError{
 			Kind: KindParseFailed,
 			Tag:  key,
-			Err:  fmt.Errorf("expected boolean, got %s", tag.valueType),
+			Err:  fmt.Errorf("expected boolean, got %s", tag.ValueType),
 		}
 	}
 
 	var val bool
-	if err := t.unmarshalTag(key, tag.data, &val); err != nil {
+	if err := t.unmarshalTag(key, tag.Data, &val); err != nil {
 		return false, &TagError{Kind: KindParseFailed, Tag: key, Err: err}
 	}
 	return val, nil
@@ -186,16 +186,16 @@ func (t PackageVersionTags) getInt32(key string) (int32, error) {
 	}
 
 	// Validate expected type
-	if tag.valueType != coredb.PkgVtypeInteger {
+	if tag.ValueType != coredb.PkgVtypeInteger {
 		return 0, &TagError{
 			Kind: KindParseFailed,
 			Tag:  key,
-			Err:  fmt.Errorf("expected integer, got %s", tag.valueType),
+			Err:  fmt.Errorf("expected integer, got %s", tag.ValueType),
 		}
 	}
 
 	var val int32
-	if err := t.unmarshalTag(key, tag.data, &val); err != nil {
+	if err := t.unmarshalTag(key, tag.Data, &val); err != nil {
 		return 0, &TagError{Kind: KindParseFailed, Tag: key, Err: err}
 	}
 	return val, nil
@@ -209,16 +209,16 @@ func (t PackageVersionTags) getFloat32(key string) (float32, error) {
 	}
 
 	// Validate expected type
-	if tag.valueType != coredb.PkgVtypeFloat {
+	if tag.ValueType != coredb.PkgVtypeFloat {
 		return 0, &TagError{
 			Kind: KindParseFailed,
 			Tag:  key,
-			Err:  fmt.Errorf("expected float, got %s", tag.valueType),
+			Err:  fmt.Errorf("expected float, got %s", tag.ValueType),
 		}
 	}
 
 	var val float32
-	if err := t.unmarshalTag(key, tag.data, &val); err != nil {
+	if err := t.unmarshalTag(key, tag.Data, &val); err != nil {
 		return 0, &TagError{Kind: KindParseFailed, Tag: key, Err: err}
 	}
 	return val, nil
@@ -226,12 +226,12 @@ func (t PackageVersionTags) getFloat32(key string) (float32, error) {
 
 // findTag locates a tag by label
 func (t PackageVersionTags) findTag(key string) (*TagInfo, error) {
-	if t.tags == nil {
+	if t.Tags == nil {
 		return nil, fmt.Errorf("tags list is nil")
 	}
 
-	for _, tag := range t.tags {
-		if tag.label == key {
+	for _, tag := range t.Tags {
+		if tag.Label == key {
 			return &tag, nil
 		}
 	}

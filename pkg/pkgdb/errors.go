@@ -3,7 +3,7 @@ package pkgdb
 import (
 	"fmt"
 
-	coredb "secure-package-registry/internal/gen/coredb"
+	"git.duti.dev/secure-package-registry/internal/gen/coredb"
 )
 
 // Ecosystem is re-exported from the internal package for use in the public API

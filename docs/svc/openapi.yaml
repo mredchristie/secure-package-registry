@@ -1,0 +1,72 @@
+components:
+    schemas:
+        PackageVersion:
+            properties:
+                ecosystem:
+                    type: string
+                identifier:
+                    type: string
+                latest:
+                    type: boolean
+                maintainer_notes:
+                    type: string
+                source:
+                    $ref: '#/components/schemas/Source'
+                tags:
+                    $ref: '#/components/schemas/PackageVersionTags'
+                trust_level:
+                    format: int32
+                    type: integer
+                version:
+                    type: string
+            type: object
+        PackageVersionTags:
+            properties:
+                Tags:
+                    items:
+                        $ref: '#/components/schemas/TagInfo'
+                    type: array
+            type: object
+        PkgVtype:
+            enum:
+                - integer
+                - boolean
+                - float
+            type: string
+        Source:
+            properties:
+                commit:
+                    type: string
+                tag:
+                    type: string
+                url:
+                    type: string
+            type: object
+        TagError:
+            properties:
+                Err: {}
+                Kind:
+                    type: integer
+                Tag:
+                    type: string
+            type: object
+        TagInfo:
+            properties:
+                data:
+                    format: byte
+                    type: string
+                label:
+                    type: string
+                value_type:
+                    enum:
+                        - integer
+                        - boolean
+                        - float
+                    type: string
+            type: object
+info:
+    description: API for querying package information and metadata
+    title: Secure Package Registry API
+    version: 1.0.0
+openapi: 3.0.3
+paths: null

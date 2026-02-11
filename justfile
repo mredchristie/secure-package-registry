@@ -47,6 +47,9 @@ test:
 generate:
   #!/usr/bin/env bash
   go generate ./...
+  # Generate API documentation
+  go run ./cmd/apigen
+  # TODO: Generate Typescript bindings from API docs
 
 help:
   @just --help

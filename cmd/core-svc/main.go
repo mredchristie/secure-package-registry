@@ -8,13 +8,13 @@ import (
 	"os/signal"
 	"syscall"
 
+	"git.duti.dev/secure-package-registry/pkg/logger"
 	"github.com/golang-migrate/migrate/v4"
 	pgxdriver "github.com/golang-migrate/migrate/v4/database/pgx/v5"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/rs/zerolog"
-	"secure-package-registry/pkg/logger"
 )
 
 const (
