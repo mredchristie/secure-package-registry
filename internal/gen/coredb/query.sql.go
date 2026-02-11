@@ -109,3 +109,53 @@ func (q *Queries) GetPackageVersionTags(ctx context.Context, arg GetPackageVersi
 	}
 	return items, nil
 }
+
+const searchPackages = `-- name: SearchPackages :many
+SELECT 
+    p.identifier,
+    p.ecosystem::text,
+    p.latest_version
+FROM packages p
+WHERE p.identifier ILIKE '%' || $1 || '%'
+  AND ($2::ECOSYSTEM IS NULL OR p.ecosystem = $2::ECOSYSTEM)
+ORDER BY p.identifier
+LIMIT $4 OFFSET ($3 - 1) * $4
+`
+
+type SearchPackagesParams struct {
+	Query     pgtype.Text
+	Ecosystem NullEcosystem
+	Page      interface{}
+	PageSize  int32
+}
+
+type SearchPackagesRow struct {
+	Identifier    string
+	PEcosystem    string
+	LatestVersion string
+}
+
+func (q *Queries) SearchPackages(ctx context.Context, arg SearchPackagesParams) ([]SearchPackagesRow, error) {
+	rows, err := q.db.Query(ctx, searchPackages,
+		arg.Query,
+		arg.Ecosystem,
+		arg.Page,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SearchPackagesRow
+	for rows.Next() {
+		var i SearchPackagesRow
+		if err := rows.Scan(&i.Identifier, &i.PEcosystem, &i.LatestVersion); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
