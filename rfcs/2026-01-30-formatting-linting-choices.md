@@ -3,7 +3,8 @@ title = "Formatting and Linting Choices"
 author = "ReadB5@cardiff.ac.uk"
 reviewer = ["cheongyx@cardiff.ac.uk"]
 date = "2026-01-30"
-status = "implemented"
+status = "superseded"
+superseded_by = ["2026-02-12-prettier-svelte-plugin.md"]
 +++
 
 ## Summary
