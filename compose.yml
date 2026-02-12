@@ -154,7 +154,5 @@ services:
     environment:
       - DATABASE_URL=postgres://core:${DB_PASSWORD:-PleaseChangeMe}@core_db:5432/secure_registry?sslmode=disable
     depends_on:
-      core_db:
-        condition: service_healthy
-    profiles:
-      - seed
+      - core_db
+      - core-svc
