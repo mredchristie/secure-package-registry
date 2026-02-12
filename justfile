@@ -5,7 +5,7 @@ _default:
 
 fix:
   #!/usr/bin/env bash
-  bunx prettier --write "**/*.md"
+  bunx prettier --write "**/*.md" --config ./.prettierrc
 
   go tool gofumpt -l -w .
 
@@ -23,8 +23,6 @@ check:
   go tool gofumpt -l .
 
   go tool golangci-lint run
-
-  bunx @biomejs/biome check
 
   cd ./dashboard-ui/ && bun ci && bun run check && cd ..
 

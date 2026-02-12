@@ -4,19 +4,34 @@
     "@sveltejs/adapter-node": "^5.5.2",
     "@sveltejs/kit": "^2.50.1",
     "@sveltejs/vite-plugin-svelte": "^6.2.4",
+    "prettier": "^3.5.0",
+    "prettier-plugin-svelte": "^3.2.8",
     "svelte": "^5.48.2",
     "svelte-check": "^4.3.5",
     "typescript": "^5.9.3",
     "vite": "^7.3.1"
   },
   "name": "dashboard-ui",
+  "prettier": {
+    "overrides": [
+      {
+        "files": "*.svelte",
+        "options": {
+          "parser": "svelte"
+        }
+      }
+    ],
+    "plugins": [
+      "prettier-plugin-svelte"
+    ]
+  },
   "private": true,
   "scripts": {
     "build": "vite build",
-    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && biome check",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && biome check && prettier --check '**/*.svelte'",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "dev": "vite dev",
-    "format": "biome check --write",
+    "format": "biome check --write && prettier --write '**/*.svelte'",
     "prepare": "svelte-kit sync || echo ''",
     "preview": "vite preview"
   },
