@@ -1,6 +1,0 @@
-{
-  "dependencies": {},
-  "devDependencies": {
-    "@sveltejs/adapter-node": "^5.5.2"
-  }
-}

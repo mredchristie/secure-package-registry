@@ -28,6 +28,8 @@
       "scripts/**",
       "src/**",
       "*.ts",
+      "*.js",
+      "*.svelte",
       "*.json",
       "*.jsonc",
       "!**/crates",

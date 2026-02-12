@@ -1,123 +1,125 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  
-  // Types matching the API
-  interface PackageSummary {
-    identifier: string;
-    ecosystem: 'npm' | 'go' | 'cargo' | 'pypi';
-    latest_version: string;
-  }
-  
-  interface SearchResult {
-    items: PackageSummary[];
-  }
-  
-  interface PackageVersion {
-    identifier: string;
-    ecosystem: string;
-    version: string;
-    latest: boolean;
-    source: {
-      url: string;
-      tag: string;
-      commit: string;
-    };
-    trust_level: number;
-    maintainer_notes: string;
-    tags: Array<{
-      label: string;
-      value_type: 'boolean' | 'integer' | 'float';
-      data: string; // base64 encoded JSON
-    }>;
-  }
-  
-  // Decode base64 and parse JSON value
-  function decodeTagValue(data: string): string {
-    try {
-      const decoded = atob(data);
-      const parsed = JSON.parse(decoded);
-      return String(parsed);
-    } catch (e) {
-      return data;
-    }
-  }
-  
-  let searchQuery = '';
-  let selectedEcosystem: string = '';
-  let searchResults: PackageSummary[] = [];
-  let selectedPackage: PackageVersion | null = null;
-  let loading = false;
-  let error = '';
-  
-  const ecosystems = [
-    { value: '', label: 'All Ecosystems' },
-    { value: 'npm', label: 'npm' },
-    { value: 'go', label: 'Go' },
-    { value: 'cargo', label: 'Cargo' },
-    { value: 'pypi', label: 'PyPI' }
-  ];
-  
-  async function searchPackages() {
-    if (!searchQuery.trim()) {
-      error = 'Please enter a search term';
-      return;
-    }
-    
-    loading = true;
-    error = '';
-    selectedPackage = null;
-    
-    try {
-      const params = new URLSearchParams();
-      params.append('q', searchQuery);
-      if (selectedEcosystem) {
-        params.append('ecosystem', selectedEcosystem);
-      }
-      
-      const response = await fetch(`/api/v1/svc/packages?${params}`);
-      if (!response.ok) {
-        throw new Error('Search failed');
-      }
-      
-      const data: SearchResult = await response.json();
-      searchResults = data.items;
-    } catch (err) {
-      error = 'Failed to search packages. Please try again.';
-      searchResults = [];
-    } finally {
-      loading = false;
-    }
-  }
-  
-  async function selectPackage(pkg: PackageSummary) {
-    loading = true;
-    error = '';
-    
-    try {
-      const response = await fetch(`/api/v1/svc/packages/${pkg.ecosystem}/${pkg.identifier}/${pkg.latest_version}`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch package details');
-      }
-      
-      selectedPackage = await response.json();
-    } catch (err) {
-      error = 'Failed to fetch package details.';
-      selectedPackage = null;
-    } finally {
-      loading = false;
-    }
-  }
-  
-  function clearSelection() {
-    selectedPackage = null;
-  }
-  
-  // Handle Enter key in search input
-  function handleKeydown(event: KeyboardEvent) {
-    if (event.key === 'Enter') {
-      searchPackages();
-    }
-  }
+import { onMount } from "svelte";
+
+// Types matching the API
+interface PackageSummary {
+	identifier: string;
+	ecosystem: "npm" | "go" | "cargo" | "pypi";
+	latest_version: string;
+}
+
+interface SearchResult {
+	items: PackageSummary[];
+}
+
+interface PackageVersion {
+	identifier: string;
+	ecosystem: string;
+	version: string;
+	latest: boolean;
+	source: {
+		url: string;
+		tag: string;
+		commit: string;
+	};
+	trust_level: number;
+	maintainer_notes: string;
+	tags: Array<{
+		label: string;
+		value_type: "boolean" | "integer" | "float";
+		data: string; // base64 encoded JSON
+	}>;
+}
+
+// Decode base64 and parse JSON value
+function decodeTagValue(data: string): string {
+	try {
+		const decoded = atob(data);
+		const parsed = JSON.parse(decoded);
+		return String(parsed);
+	} catch (e) {
+		return data;
+	}
+}
+
+const searchQuery = "";
+const selectedEcosystem = "";
+let searchResults: PackageSummary[] = [];
+let selectedPackage: PackageVersion | null = null;
+let loading = false;
+let error = "";
+
+const ecosystems = [
+	{ label: "All Ecosystems", value: "" },
+	{ label: "npm", value: "npm" },
+	{ label: "Go", value: "go" },
+	{ label: "Cargo", value: "cargo" },
+	{ label: "PyPI", value: "pypi" },
+];
+
+async function searchPackages() {
+	if (!searchQuery.trim()) {
+		error = "Please enter a search term";
+		return;
+	}
+
+	loading = true;
+	error = "";
+	selectedPackage = null;
+
+	try {
+		const params = new URLSearchParams();
+		params.append("q", searchQuery);
+		if (selectedEcosystem) {
+			params.append("ecosystem", selectedEcosystem);
+		}
+
+		const response = await fetch(`/api/v1/svc/packages?${params}`);
+		if (!response.ok) {
+			throw new Error("Search failed");
+		}
+
+		const data: SearchResult = await response.json();
+		searchResults = data.items;
+	} catch (err) {
+		error = "Failed to search packages. Please try again.";
+		searchResults = [];
+	} finally {
+		loading = false;
+	}
+}
+
+async function selectPackage(pkg: PackageSummary) {
+	loading = true;
+	error = "";
+
+	try {
+		const response = await fetch(
+			`/api/v1/svc/packages/${pkg.ecosystem}/${pkg.identifier}/${pkg.latest_version}`,
+		);
+		if (!response.ok) {
+			throw new Error("Failed to fetch package details");
+		}
+
+		selectedPackage = await response.json();
+	} catch (err) {
+		error = "Failed to fetch package details.";
+		selectedPackage = null;
+	} finally {
+		loading = false;
+	}
+}
+
+function clearSelection() {
+	selectedPackage = null;
+}
+
+// Handle Enter key in search input
+function handleKeydown(event: KeyboardEvent) {
+	if (event.key === "Enter") {
+		searchPackages();
+	}
+}
 </script>
 
 <main>
