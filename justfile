@@ -38,6 +38,7 @@ check:
   cd ./dashboard-ui/ && bun ci && bun run check && cd ..
 
   # Check markdown
+  bunx prettier -c "**/*.md" --config ./.prettierrc
   git ls-files "*.md" | xargs -r bunx markdownlint-cli2
 
 test:
