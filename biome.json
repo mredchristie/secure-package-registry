@@ -60,8 +60,7 @@
         "noUndeclaredDependencies": "error"
       },
       "nursery": {
-        "noFloatingPromises": "error",
-        "noImportCycles": "error"
+        "noFloatingPromises": "error"
       },
       "style": {
         "noInferrableTypes": "error",
@@ -78,6 +77,7 @@
         "useTemplate": "error"
       },
       "suspicious": {
+        "noImportCycles": "error",
         "noVar": "on"
       }
     }
