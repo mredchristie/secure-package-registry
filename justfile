@@ -5,6 +5,7 @@ _default:
 
 fix:
   #!/usr/bin/env bash
+  # Fix markdown formatting with Prettier
   bunx prettier --write "**/*.md" --config ./.prettierrc
 
   go tool gofumpt -l -w .
