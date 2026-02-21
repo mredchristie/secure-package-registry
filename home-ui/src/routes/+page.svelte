@@ -1,602 +1,729 @@
 <script lang="ts">
-  const lastUpdated = '2026-02-03';
+  import { onMount } from "svelte";
+  import Header from "./Header.svelte";
 
-  type SlideKey = 'Philosophies' | 'Values' | 'Team' | 'Impact' | 'Contact';
+  // dark by default, restore from localStorage on mount
+  let isDark = true;
 
-  interface Slide {
-    key: SlideKey;
-    title: string;
+  // collapsible incidents section
+  let showIncidents = false;
+
+  // keeping all the content in arrays so the template stays clean
+  // just add an entry here and the page updates automatically
+
+  // real supply chain incidents for the problem section - credit to Antonio for research and gathering statistics.
+  const incidents = [
+    {
+      severity: "CVSS 10.0",
+      title: "XZ Backdoor",
+      description:
+        "Multi-year state-sponsored operation discovered by chance when a developer noticed a 500ms SSH delay",
+      date: "March 2024",
+      animation: "slide-in-left",
+    },
+    {
+      severity: "754+ packages",
+      title: "Shai Hulud",
+      description:
+        "Self-propagating worm that stole credentials and exposed 33K secrets across GitHub Actions",
+      date: "November 2025",
+      animation: "slide-in-right",
+    },
+    {
+      severity: "6 months",
+      title: "Notepad++ Compromise",
+      description:
+        "Infrastructure compromised via hosting provider for half a year before detection",
+      date: "2025",
+      animation: "slide-in-left",
+    },
+    {
+      severity: "First AI Attack",
+      title: "S1ngularity",
+      description:
+        "AI-weaponized supply chain attack using Claude and Gemini with --dangerously-skip-permissions flags",
+      date: "August 2025",
+      animation: "slide-in-right",
+    },
+  ];
+
+  // big damage numbers shown in red
+  const headlineStats = [
+    { number: "512K", label: "Malicious packages in 2024", delay: "" },
+    { number: "+156%", label: "Year-over-year growth", delay: "delay-1" },
+    { number: "$4.88M", label: "Average breach cost", delay: "delay-2" },
+    { number: "$46B", label: "Total global damage", delay: "delay-3" },
+  ];
+
+  // download volumes to show how wide the attack surface actually is
+  const downloadStats = [
+    { count: "4.5 trillion", label: "npm downloads per year", delay: "" },
+    {
+      count: "530 billion",
+      label: "PyPI downloads per year",
+      delay: "delay-1",
+    },
+    { count: "150", label: "Average dependencies per app", delay: "delay-2" },
+  ];
+
+  // numbered steps for the solution section - updated with 5 stages
+  const steps = [
+    {
+      number: "01",
+      title: "Package Upload",
+      description:
+        "Request any npm package for verification. SPR fetches it from the public registry.",
+      animation: "slide-in-left",
+    },
+    {
+      number: "02",
+      title: "Diff Check",
+      description:
+        "Compare the published package to the GitHub source. Catches backdoor injections like the event-stream attack.",
+      animation: "slide-in-right",
+    },
+    {
+      number: "03",
+      title: "EBPF Monitor",
+      description:
+        "Run in an isolated Podman container with kernel-level monitoring. Watches network calls, file access, and process spawning.",
+      animation: "slide-in-left",
+    },
+    {
+      number: "04",
+      title: "Behavioral Analysis",
+      description:
+        "Execute package in sandboxed environment. Monitor runtime behavior to detect malicious activity patterns.",
+      animation: "slide-in-right",
+    },
+    {
+      number: "05",
+      title: "Verified",
+      description:
+        "Package is added to your private registry. Safe to install.",
+      animation: "slide-in-left",
+    },
+  ];
+
+  // market size cards
+  const marketCards = [
+    {
+      label: "Market Size",
+      number: "$1.95B – $5.53B",
+      sublabel: "Supply chain security market",
+      animation: "slide-in-left",
+    },
+    {
+      label: "Growth Rate",
+      number: "10.9% – 12.8%",
+      sublabel: "CAGR through 2030",
+      animation: "slide-in-right",
+    },
+  ];
+
+  onMount(() => {
+    // restore saved theme preference
+    const saved = localStorage.getItem("isDark");
+    if (saved !== null) isDark = saved === "true";
+
+    // IntersectionObserver for scroll animations
+    // adds "visible" when an element enters the viewport, removes it when it leaves so it replays
+    const scrollObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((e) =>
+          e.target.classList.toggle("visible", e.isIntersecting),
+        );
+      },
+      { threshold: 0.15 },
+    );
+
+    document
+      .querySelectorAll(".animate")
+      .forEach((el) => scrollObserver.observe(el));
+
+    // cleanup on destroy
+    return () => scrollObserver.disconnect();
+  });
+
+  function toggleTheme() {
+    isDark = !isDark;
+    localStorage.setItem("isDark", isDark.toString());
   }
-
-  const slides: Slide[] = [
-    {key: 'Philosophies', title: 'Security philosophies'},
-    {key: 'Values', title: 'Core values'},
-    {key: 'Team', title: 'Meet the team'},
-    {key: 'Impact', title: 'Project impact'},
-    {key: 'Contact', title: 'Get in touch'}
-  ];
-
-  let active: SlideKey = 'Philosophies';
-
-  type AccordionItem = {
-    title: string;
-    summary: string;
-    bullets?: string[];
-  };
-
-  const philosophy: AccordionItem[] = [
-    {
-      title: 'Preventive, not reactive',
-      summary:
-              'SPR aims to reduce software supply-chain risk by verifying packages before they are installed,' +
-              ' helping organisations prevent security issues before they enter their development environments.'
-    },
-    {
-      title: 'Defence-in-depth',
-      summary: 'No single control is sufficient. SPR layers multiple verification signals.',
-      bullets: [
-        'Reproducible builds',
-        'Behavioural analysis in an isolated environment',
-        'Source-to-release verification',
-        'LLM-assisted diff review (supporting signal)',
-        'Human review for high-risk cases'
-      ]
-    },
-    {
-      title: 'Risk reduction, not a guarantee',
-      summary:
-              'We communicate coverage limits and residual risk clearly so teams can make informed decisions.',
-      bullets: [
-              'Transparent coverage limits',
-                      'Clear status indicators and rationale',
-                      'Encourages defence-in-depth in client organisations'
-              ]
-    },
-    {
-      title: 'Internal security standards',
-      summary:
-              'Operational security must meet or exceed the standards we expect from clients.',
-      bullets: [
-        'Zero-trust principles',
-        'Isolation of build and analysis environments',
-        'Mandatory review for critical cases',
-        'Resilience and auditability'
-      ]
-    }
-  ];
-
-  let openIndex: number | null = 0;
-  function toggle(i: number) {
-    openIndex = openIndex === i ? null : i;
-  }
-
-  type Team = {
-    role: string;
-    name: string;
-  };
-
-  const team: Team[] = [
-    { role: 'Project Lead', name: '(Name)' },
-    { role: 'Backend', name: '(Name)' },
-    { role: 'Frontend', name: '(Name)' },
-    { role: 'Security & Verification', name: '(Name)' }
-  ];
-
-  type ContactInfo = {
-    label: string;
-    value: string;
-    href: string };
-
-  const  contactInfo: ContactInfo[] = [
-    { label: 'Email', value: 'spr@example.com', href: 'mailto:spr@example.com' },
-    { label: 'Phone', value: '+123 456 789',    href: 'tel:+123456789'         }
-  ];
-
-  // PascalCase types for clarity
-  type AboutOverview = {
-    title: string;
-    content: string;
-  };
-
-  const aboutInfo: AboutOverview[] = [
-    { title: 'Overview', content: 'SPR (Secure Package Registry) is an alternative package registry that surfaces ' +
-              'verification status so teams can make safer dependency choices.' },
-  ];
-
-  type MissionItem = {
-    title: string;
-    content: string;
-  };
-
-  const mission: MissionItem[] = [
-     { title: 'Mission',
-       content: 'SPR helps reduce software supply-chain risk by verifying packages before they reach developers. ' +
-               'We focus on transparency: what was checked, what was not, and the resulting confidence signals. '},
-     { title: 'Mission-muted',
-       content: 'SPR is designed to be drop-in compatible with existing package ' +
-               'manager workflows (configured via registry settings).' }
-   ];
-
-  type ValuesItem = {
-    title: string;
-    summary: string;
-  };
-
-  const values: ValuesItem[] = [
-    { title: 'Values', summary: 'We prioritise security, reliability, and developer usability. ' +
-              'Our outputs are designed to be actionable and auditable.' }
-  ];
-
-  type ImpactItem = {
-    title: string;
-    content: string;
-  };
-
-  const impact: ImpactItem[] = [
-    { title: 'Project impact', content: 'By verifying packages before they reach developers,' +
-              ' SPR helps reduce the risk of supply-chain attacks. ' +
-              'Our transparent signals enable teams to make informed decisions and prioritise security' +
-              ' in their dependencies.' }
-  ];
-
 </script>
 
-<main class="about-page">
-   <header class="hero">
-     <p class="eyebrow">Secure Package Registry</p>
-     <h1>About SPR</h1>
-     <p class="lead">
-       {#each aboutInfo as info}
-         {info.content}
-       {/each}
-     </p>
-   </header>
+<!-- class:dark swaps the whole colour palette via CSS vars -->
+<div class="page" class:dark={isDark}>
+  <!-- Use reusable header component -->
+  <Header {isDark} onToggleTheme={toggleTheme} />
 
-   <section class="card " aria-labelledby="mission-title">
-     <div class="mission">
-       <h2 id="mission-title">Mission</h2>
-       {#each mission as m}
-         <p>{m.content}</p>
-       {/each}
-     </div>
-    </section>
+  <!-- hero - full height, centred, animates on load -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero-badge">Trust but Verify</div>
+      <h1 class="hero-title">Secure Package Registry</h1>
+      <p class="hero-subtitle">
+        Verified package registry for npm, PyPI, Go, and Cargo — blocking
+        malicious code before it reaches your codebase
+      </p>
+      <a href="/landing" class="signup-button">Request Early Access</a>
+    </div>
+  </section>
 
-   <section class="slideshow-container" aria-label="slides">
-     <!-- Clickable titles -->
-     <nav class="slide-tabs">
-       {#each slides as s}
-         <button
-                 type="button" class="tab" class:is-active={active === s.key} on:click={() => active = s.key}>
-           {s.title}
-         </button>
-       {/each}
-     </nav>
-     <!-- Content for each slide -->
-     <div class="slide-panel">
-       {#if active === 'Philosophies'}
-         <section class="card" aria-labelledby="philosophy-title">
-           <div class="philosophy">
-             <h2 id="philosophy-title">Security philosophy</h2>
+  <!-- MOVED UP: scale section now comes before problem section -->
+  <section class="section section-alt">
+    <div class="container">
+      <h2 class="section-title animate fade-in">The Scale is Staggering</h2>
 
-             <div class="accordion" role="list">
-               {#each philosophy as item, i}
-                 <div class="acc-item" role="listitem">
-                   <button
-                           type="button"
-                           class="acc-trigger"
-                           aria-expanded={openIndex === i}
-                           on:click={() => toggle(i)}>
-                     <span>{item.title}</span>
-                     <span class="chev" aria-hidden="true">{openIndex === i ? '–' : '+'}</span>
-                   </button>
+      <div class="headline-stats">
+        {#each headlineStats as { number, label, delay }}
+          <div class="headline-stat animate zoom-in {delay}">
+            <div class="headline-number">{number}</div>
+            <div class="headline-label">{label}</div>
+          </div>
+        {/each}
+      </div>
 
-                   {#if openIndex === i}
-                     <div class="acc-panel">
-                       <p>{item.summary}</p>
-                       {#if item.bullets?.length}
-                         <ul>
-                           {#each item.bullets as b}
-                             <li>{b}</li>
-                           {/each}
-                         </ul>
-                       {/if}
-                     </div>
-                   {/if}
-                 </div>
-               {/each}
-             </div>
-           </div>
-         </section>
-       {:else if active === 'Values'}
-         <section class="card" aria-labelledby="values-title">
-           <h2 id="values-title">Values</h2>
-           {#each values as values}
-             <p>{values.summary}</p>
-           {/each}
-         </section>
-       {:else if active === 'Team'}
-         <section class="card" aria-labelledby="team-title">
-           <h2 id="team-title">Team</h2>
-           <ul class="team-list">
-             {#each team as member}
-               <li>
-                 <span class="team-role">{member.role}</span>
-                 <span class="team-name">{member.name}</span>
-               </li>
-             {/each}
-           </ul>
-           <p class="muted">
-             This project is built as part of a third-year Software Engineering group project.
-           </p>
-         </section>
-         {:else if active === 'Impact'}
-         <section class="card" aria-labelledby="impact-title">
-           <h2 id="impact-title">Project impact</h2>
-           {#each impact as i}
-             <p>{i.content}</p>
-           {/each}
-         </section>
-       {:else if active === 'Contact'}
-         <section class="card contact-card" aria-labelledby="contact-title">
-           <h2 id="contact-title">Contact</h2>
-           <ul class="contact-list">
-             {#each contactInfo as info}
-               <li>
-                 <span class="contact-label">{info.label}</span>
-                 <a href={info.href}>{info.value}</a>
-               </li>
-             {/each}
-           </ul>
-           <p class="meta">Last updated: {lastUpdated}</p>
-         </section>
-       {/if}
-     </div>
-   </section>
+      <div class="download-stats">
+        {#each downloadStats as { count, label, delay }, i}
+          <!-- divider between items, not before the first -->
+          {#if i > 0}<div class="divider"></div>{/if}
+          <div class="download-stat animate slide-in-bottom {delay}">
+            <span class="download-count">{count}</span>
+            <span class="download-label">{label}</span>
+          </div>
+        {/each}
+      </div>
+    </div>
+  </section>
 
- </main>
+  <!-- problem section with explanation paragraph and collapsible examples -->
+  <section class="section">
+    <div class="container">
+      <h2 class="section-title animate slide-in-left">The Problem</h2>
 
- <style>
-  :global(body) {
+      <p class="problem-intro animate fade-in">
+        Supply chain attacks exploit the trust developers place in open-source
+        packages. When you run <code>npm install</code>, malicious code can
+        execute immediately—stealing credentials, injecting backdoors, or
+        compromising your entire infrastructure. These aren't theoretical risks.
+        Real attacks are happening right now.
+      </p>
+
+      <button
+        class="toggle-button animate fade-in delay-1"
+        on:click={() => (showIncidents = !showIncidents)}
+      >
+        {showIncidents ? "Hide Examples ▲" : "See Real Examples ▼"}
+      </button>
+
+      {#if showIncidents}
+        <div class="incidents-grid">
+          {#each incidents as { severity, title, description, date, animation }}
+            <div class="incident-card animate {animation}">
+              <div class="severity-tag">{severity}</div>
+              <h3>{title}</h3>
+              <p>{description}</p>
+              <span class="incident-date">{date}</span>
+            </div>
+          {/each}
+        </div>
+      {/if}
+    </div>
+  </section>
+
+  <!-- solution steps - large faint number behind each heading is CSS only, no extra markup -->
+  <section class="section section-alt">
+    <div class="container">
+      <h2 class="section-title animate slide-in-right">Our Solution</h2>
+
+      <div class="steps-grid">
+        {#each steps as { number, title, description, animation }}
+          <div class="step animate {animation}">
+            <div class="step-number">{number}</div>
+            <h3>{title}</h3>
+            <p>{description}</p>
+          </div>
+        {/each}
+      </div>
+    </div>
+  </section>
+
+  <!-- market section - two stat cards then the "why now" list -->
+  <section class="section">
+    <div class="container">
+      <h2 class="section-title animate fade-in">Market Opportunity</h2>
+
+      <div class="market-cards">
+        {#each marketCards as { label, number, sublabel, animation }}
+          <div class="market-card animate {animation}">
+            <div class="card-label">{label}</div>
+            <div class="card-number">{number}</div>
+            <div class="card-sublabel">{sublabel}</div>
+          </div>
+        {/each}
+      </div>
+
+      <div class="market-timing animate zoom-in">
+        <h3>Why Now?</h3>
+        <ul>
+          <li>Attacks growing <strong>+156% YoY</strong></li>
+          <li>AI-powered attacks emerging</li>
+          <li>
+            Regulatory mandates taking effect (EO 14028, EU Cyber Resilience
+            Act)
+          </li>
+          <li>No preventive solution exists</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- CTA - same button style as the hero so it's consistent -->
+  <section class="signup-section">
+    <div class="container">
+      <h2 class="animate fade-in">Ready to secure your supply chain?</h2>
+      <p class="animate fade-in delay-1">
+        Join us at SPR to be the change protecting against the $46B attack
+        problem
+      </p>
+      <a href="/landing" class="signup-button animate zoom-in delay-2"
+        >Get Started</a
+      >
+    </div>
+  </section>
+
+  <!-- footer -->
+  <footer>
+    <p>SPR &copy; 2026</p>
+  </footer>
+</div>
+
+<style>
+  /* CSS vars for the colour palette - .dark swaps them all at once */
+  .page {
+    /* light mode */
+    --bg-primary: #fff;
+    --bg-secondary: #fafafa;
+    --text-primary: #111;
+    --text-secondary: #4b5563;
+    --accent: #1d4ed8;
+    --accent-hover: #1e40af;
+    --border: #e5e7eb;
+    --card-bg: #fff;
+    --card-border: #e5e7eb;
+  }
+
+  .page.dark {
+    /* dark mode overrides */
+    --bg-primary: #0a0a0f;
+    --bg-secondary: #1a1a2e;
+    --text-primary: #fff;
+    --text-secondary: #ccc;
+    --accent: #4fc3f7;
+    --accent-hover: #51cf66;
+    --border: #2a2a3e;
+    --card-bg: rgba(26, 26, 46, 0.5);
+    --card-border: rgba(79, 195, 247, 0.2);
+  }
+
+  /* basic reset */
+  * {
     margin: 0;
-    background:
-            radial-gradient(circle at 10% 0%, #dce8f6 0%, rgba(220, 232, 246, 0) 46%),
-            radial-gradient(circle at 90% 100%, #d8efec 0%, rgba(216, 239, 236, 0) 40%),
-            linear-gradient(180deg, #f5f8fc 0%, #ecf2f8 100%);
+    padding: 0;
+    box-sizing: border-box;
   }
 
-  .about-page {
-    --surface: #ffffff;
-    --surface-muted: #f8fbff;
-    --text: #1a2736;
-    --text-muted: #4f6074;
-    --accent: #0d6bb5;
-    --accent-strong: #0a4f87;
-    --border: #d7e2ef;
-    --radius: 16px;
-    --shadow: 0 22px 40px -28px rgba(13, 48, 85, 0.45);
-    max-width: 1080px;
-    margin: 2.5rem auto 4rem;
-    padding: 0 1.25rem;
-    display: grid;
-    gap: 1.25rem;
-    color: var(--text);
-    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* page wrapper - transition makes theme swap smooth */
+  .page {
+    font-family:
+      system-ui,
+      -apple-system,
+      sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    line-height: 1.6;
+    transition:
+      background 0.3s,
+      color 0.3s;
+    overscroll-behavior: none;
   }
 
+  /* centred content column, capped at 1400px */
+  .container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 2rem;
+  }
+
+  /* hero fills most of the screen on first load */
   .hero {
-    border: 1px solid var(--border);
-    border-radius: calc(var(--radius) + 2px);
-    background: linear-gradient(135deg, #fafdff 0%, #eef4fb 100%);
-    box-shadow: var(--shadow);
-    padding: clamp(1.5rem, 3vw, 2.5rem);
-    animation: fade-in-up 500ms ease both;
-  }
-
-  .eyebrow {
-    margin: 0;
-    color: var(--accent);
-    font-size: 0.78rem;
-    letter-spacing: 0.13em;
-    text-transform: uppercase;
-    font-weight: 700;
-  }
-
-  h1 {
-    margin: 0.35rem 0 0;
-    color: #102336;
-    font-size: clamp(1.8rem, 3vw, 2.6rem);
-    line-height: 1.1;
-    font-weight: 750;
-  }
-
-  .lead {
-    margin: 0.85rem 0 0;
-    max-width: 70ch;
-    color: var(--text-muted);
-    line-height: 1.65;
-    font-size: 1.02rem;
-  }
-
-  .card {
-    background: var(--surface);
-    border-radius: var(--radius);
-    border: 1px solid var(--border);
-    box-shadow: var(--shadow);
-    padding: clamp(1.25rem, 2.6vw, 1.8rem);
-    display: grid;
-    gap: 0.65rem;
-    animation: fade-in-up 560ms ease both;
-  }
-
-  h2 {
-    margin: 0 0 0.65rem;
-    color: #12263a;
-    font-size: 1.25rem;
-    letter-spacing: 0.01em;
-  }
-
-  p {
-    margin: 0;
-    color: var(--text-muted);
-    line-height: 1.68;
-  }
-
-  .muted {
-    margin-top: 0.65rem;
-    color: #5a6b80;
-    font-size: 0.95rem;
-  }
-
-  /* Accordion */
-  .accordion {
-    display: grid;
-    gap: 0.6rem;
-    margin-top: 0.35rem;
-  }
-
-  .acc-item {
-    border: 1px solid #d8e4f0;
-    border-radius: 12px;
-    overflow: hidden;
-    background: #ffffff;
-    transition: border-color 200ms ease, box-shadow 200ms ease;
-  }
-
-  .acc-trigger {
-    width: 100%;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 1rem;
-    padding: 0.85rem 1rem;
-    border: 0;
-    background: transparent;
-    text-align: left;
-    font-weight: 650;
-    color: #12263a;
-    cursor: pointer;
-    transition: background 150ms ease;
-  }
-
-  .acc-trigger:hover {
-    background: #f6faff;
-  }
-
-  .chev {
-    flex-shrink: 0;
-    width: 22px;
-    height: 22px;
+    min-height: 90vh;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 50%;
-    background: #eef4fb;
-    color: var(--accent-strong);
+    text-align: center;
+    padding: 4rem 2rem;
+  }
+
+  /* pill badge with a tinted background */
+  .hero-badge {
+    display: inline-block;
+    background: rgba(79, 195, 247, 0.1);
+    color: var(--accent);
+    border: 1px solid var(--accent);
+    padding: 0.5rem 1.5rem;
+    border-radius: 30px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin-bottom: 2rem;
+    animation: fadeInUp 0.8s ease-out;
+  }
+
+  /* clamp scales font with viewport width - avoids needing media queries for type */
+  .hero-title {
+    font-size: clamp(2.5rem, 8vw, 5rem);
     font-weight: 700;
+    margin-bottom: 1.5rem;
+    line-height: 1.1;
+    animation: fadeInUp 0.8s ease-out 0.2s both;
+  }
+
+  .hero-subtitle {
+    font-size: clamp(1rem, 2vw, 1.25rem);
+    color: var(--text-secondary);
+    max-width: 800px;
+    margin: 0 auto 2.5rem;
+    animation: fadeInUp 0.8s ease-out 0.4s both;
+  }
+
+  .section {
+    padding: 6rem 0;
+  }
+  .section-alt {
+    background: var(--bg-secondary);
+  }
+
+  .section-title {
+    font-size: clamp(2rem, 5vw, 3.5rem);
+    font-weight: 700;
+    margin-bottom: 4rem;
+    text-align: center;
+  }
+
+  /* NEW: problem intro paragraph */
+  .problem-intro {
+    max-width: 800px;
+    margin: 0 auto 2rem;
+    text-align: center;
+    font-size: 1.1rem;
+    color: var(--text-secondary);
+    line-height: 1.8;
+  }
+
+  .problem-intro code {
+    background: rgba(79, 195, 247, 0.1);
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-family: "Courier New", monospace;
+    color: var(--accent);
     font-size: 1rem;
-    transition: background 150ms ease;
   }
 
-  .acc-panel {
-    padding: 0 1rem 0.95rem;
-    display: grid;
-    gap: 0.65rem;
-  }
-
-  .acc-panel ul {
-    margin: 0;
-    padding-left: 1.1rem;
-    color: var(--text-muted);
-    line-height: 1.65;
-    display: grid;
-    gap: 0.25rem;
-  }
-
-  .team-list {
-    margin: 0;
-    padding-left: 1.1rem;
-    color: var(--text-muted);
-    line-height: 1.6;
-    display: grid;
-    gap: 0.35rem;
-  }
-
-  .team-list li {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.65rem 0.9rem;
-    background: #f6faff;
-    border: 1px solid #e5eef7;
-    border-radius: 10px;
+  /* NEW: toggle button */
+  .toggle-button {
+    display: block;
+    margin: 2rem auto;
+    background: transparent;
+    border: 2px solid var(--accent);
+    color: var(--accent);
+    padding: 0.75rem 2rem;
+    border-radius: 8px;
     font-size: 0.95rem;
-  }
-
-  .team-role {
     font-weight: 600;
-    color: #12263a;
+    cursor: pointer;
+    transition: all 0.3s;
   }
 
-  .team-name {
-    color: var(--text-muted);
+  .toggle-button:hover {
+    background: var(--accent);
+    color: var(--bg-primary);
   }
 
-  .contact-card {
-    background: linear-gradient(160deg, var(--surface) 0%, var(--surface-muted) 100%);
-  }
-
-  .contact-list {
-    list-style: none;
-    padding: 0;
-    margin: 0.2rem 0 0;
+  /* auto-fit grid - browser picks column count based on available width */
+  .incidents-grid {
     display: grid;
-    gap: 0.8rem;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 2rem;
+    margin-top: 3rem;
   }
 
-  .contact-list li {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 1rem;
-    padding: 0.75rem 0.9rem;
-    background: #ffffff;
-    border: 1px solid #d8e4f0;
-    border-radius: 10px;
+  /* position: relative needed for the ::before hover stripe */
+  .incident-card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 2rem;
+    transition: all 0.3s;
+    position: relative;
+    overflow: hidden;
   }
 
-  .contact-list span {
-    color: #31465d;
+  /* red left border stripe on hover using a pseudo-element */
+  .incident-card::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+    background: #ff6b6b;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .incident-card:hover {
+    transform: translateY(-8px);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.1);
+  }
+  .incident-card:hover::before {
+    opacity: 1;
+  }
+
+  /* red badge - red = danger */
+  .severity-tag {
+    display: inline-block;
+    background: rgba(255, 107, 107, 0.1);
+    color: #ff6b6b;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
     font-weight: 600;
-    letter-spacing: 0.01em;
+    margin-bottom: 1rem;
   }
 
-  .contact-list a {
-    color: var(--accent-strong);
+  .incident-card h3 {
+    font-size: 1.5rem;
+    margin-bottom: 0.75rem;
+    color: var(--text-primary);
+  }
+  .incident-card p {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    line-height: 1.6;
+    margin-bottom: 1rem;
+  }
+  .incident-date {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+  }
+
+  /* headline stats - delay classes stagger the zoom-in */
+  .headline-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 3rem;
+    margin-bottom: 4rem;
+  }
+
+  .headline-stat {
+    text-align: center;
+  }
+
+  /* red to match the incident cards */
+  .headline-number {
+    font-size: clamp(3rem, 8vw, 5rem);
+    font-weight: 700;
+    color: #ff6b6b;
+    line-height: 1;
+    margin-bottom: 0.5rem;
+  }
+  .headline-label {
+    font-size: 1rem;
+    color: var(--text-secondary);
+  }
+
+  /* download stats row - wraps on narrow screens */
+  .download-stats {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 3rem;
+    flex-wrap: wrap;
+    padding: 2rem 0;
+  }
+
+  .download-stat {
+    text-align: center;
+  }
+
+  /* block so count and label stack vertically inside the flex item */
+  .download-count {
+    display: block;
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 0.5rem;
+  }
+  .download-label {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+  }
+
+  /* vertical divider between download stats, becomes horizontal on mobile */
+  .divider {
+    width: 1px;
+    height: 60px;
+    background: var(--border);
+  }
+
+  /* padding-left reserves space for the large faint step number */
+  .steps-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 3rem;
+    margin-top: 3rem;
+  }
+
+  .step {
+    position: relative;
+    padding-left: 5rem;
+  }
+
+  /* faint decorative number - low opacity so it doesn't compete with the heading */
+  .step-number {
+    position: absolute;
+    left: 0;
+    top: -0.5rem;
+    font-size: 4rem;
+    font-weight: 700;
+    color: var(--accent);
+    opacity: 0.15;
+    line-height: 1;
+  }
+
+  .step h3 {
+    font-size: 1.5rem;
+    margin-bottom: 0.75rem;
+    color: var(--text-primary);
+  }
+  .step p {
+    color: var(--text-secondary);
+    line-height: 1.7;
+  }
+
+  /* market cards - same shell as incident cards but no hover stripe */
+  .market-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 3rem;
+    margin-bottom: 4rem;
+  }
+
+  .market-card {
+    text-align: center;
+    padding: 2rem;
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+  }
+
+  .card-label {
+    font-size: 1rem;
+    color: var(--text-secondary);
+    margin-bottom: 1rem;
+  }
+  .card-number {
+    font-size: clamp(2rem, 5vw, 3rem);
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 0.5rem;
+  }
+  .card-sublabel {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+  }
+
+  /* "why now" block - border-bottom on li acts as a divider, no default bullets */
+  .market-timing {
+    max-width: 600px;
+    margin: 0 auto;
+    text-align: center;
+  }
+  .market-timing h3 {
+    font-size: 2rem;
+    margin-bottom: 2rem;
+    color: var(--text-primary);
+  }
+  .market-timing ul {
+    list-style: none;
+    text-align: left;
+  }
+  .market-timing li {
+    padding: 1rem 0;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-secondary);
+    font-size: 1.05rem;
+  }
+  .market-timing li:last-child {
+    border-bottom: none;
+  }
+
+  .signup-section {
+    padding: 6rem 2rem;
+    text-align: center;
+    background: var(--bg-secondary);
+  }
+  .signup-section h2 {
+    font-size: clamp(2rem, 5vw, 3rem);
+    margin-bottom: 1rem;
+  }
+  .signup-section p {
+    font-size: 1.1rem;
+    color: var(--text-secondary);
+    margin-bottom: 2.5rem;
+  }
+
+  /* shared button - used in hero and CTA, color ensures contrast in both themes */
+  .signup-button {
+    display: inline-block;
+    background: var(--accent);
+    color: var(--bg-primary);
+    padding: 1rem 2.5rem;
+    border-radius: 8px;
     text-decoration: none;
     font-weight: 600;
+    font-size: 1.05rem;
+    transition: all 0.3s;
+    animation: fadeInUp 0.8s ease-out 0.6s both;
+  }
+  .signup-button:hover {
+    background: var(--accent-hover);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
   }
 
-  .contact-list a:hover {
-    color: var(--accent);
-    text-decoration: underline;
+  footer {
+    padding: 2rem;
+    text-align: center;
+    border-top: 1px solid var(--border);
+  }
+  footer p {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
   }
 
-  .meta {
-    margin-top: 0.9rem;
-    color: #5a6b80;
-    font-size: 0.92rem;
-  }
+  /* scroll animations:
+     - .animate starts hidden (opacity 0, possibly offset)
+     - IntersectionObserver adds "visible" when in viewport
+     - CSS transition plays the entrance
+     - "visible" is removed on scroll-out so it replays
+     - :global(.visible) needed because "visible" is added via JS, not a Svelte binding */
 
-  @keyframes fade-in-up {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-
-  @media (max-width: 760px) {
-    .about-page { margin-top: 1.5rem; gap: 1rem; }
-    .contact-list li { align-items: flex-start; flex-direction: column; gap: 0.35rem; }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .hero, .card { animation: none; }
-  }
-
-  /* Slide */
-  .slideshow-container {
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--surface);
-    box-shadow: var(--shadow);
-    overflow: hidden;
-    display: grid;
-    grid-template-rows: auto 1fr;
-  }
-
-  .slide-tabs {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem;
-    padding: 0.75rem 1rem;
-    border-bottom: 2px solid var(--border);
-    background: linear-gradient(135deg, #fafdff 0%, #f5f9fe 100%);
-  }
-
-  .tab {
-    border: 1px solid transparent;
-    background: transparent;
-    padding: 0.6rem 1rem;
-    border-radius: 8px;
-    cursor: pointer;
-    font-weight: 600;
-    font-size: 0.92rem;
-    color: var(--text-muted);
-    transition: all 180ms ease;
-    position: relative;
-  }
-
-  .tab:hover {
-    background: rgba(255, 255, 255, 0.8);
-    border-color: #c5d5e8;
-    color: var(--text);
-    transform: translateY(-1px);
-  }
-
-  .tab.is-active {
-    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
-    color: #ffffff;
-    border-color: var(--accent-strong);
-    box-shadow: 0 4px 12px rgba(13, 107, 181, 0.25);
-  }
-
-  .tab.is-active:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 6px 16px rgba(13, 107, 181, 0.35);
-  }
-
-  .slide-panel {
-    padding: 2rem 1.5rem;
-    min-height: 480px;
-    animation: slide-fade 240ms cubic-bezier(0.4, 0, 0.2, 1);
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    background: linear-gradient(180deg, #ffffff 0%, #fcfdff 100%);
-  }
-
-  .slide-panel > section {
-    width: 100%;
-    max-width: 100%;
-    border: none;
-    box-shadow: none;
-    padding: 0;
-    background: transparent;
-  }
-
-  .slide-panel .accordion {
-    margin-top: 1rem;
-  }
-
-  .slide-panel .acc-item {
-    border: 1px solid #e5eef7;
-    background: #ffffff;
-    transition: all 200ms ease;
-  }
-
-  .slide-panel .acc-item:hover {
-    border-color: #d0e0f0;
-    box-shadow: 0 2px 8px rgba(13, 107, 181, 0.08);
-  }
-
-  .slide-panel{
-    box-shadow: 0 8px 20px rgba(13, 48, 85, 0.15);
-    border: 2px solid #e8f0f8;
-  }
-
-  @keyframes slide-fade {
+  @keyframes fadeInUp {
     from {
       opacity: 0;
-      transform: translateY(8px);
+      transform: translateY(30px);
     }
     to {
       opacity: 1;
@@ -604,40 +731,76 @@
     }
   }
 
-  @media (max-width: 760px) {
-    .slide-tabs {
-      padding: 0.6rem 0.75rem;
-      gap: 0.3rem;
-    }
-
-    .tab {
-      padding: 0.5rem 0.75rem;
-      font-size: 0.88rem;
-    }
-
-    .slide-panel {
-      padding: 1.5rem 1rem;
-      min-height: 400px;
-    }
+  /* hidden base state - springy cubic-bezier gives a slight overshoot */
+  .animate {
+    opacity: 0;
+    transition: all 1s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .animate:global(.visible) {
+    opacity: 1;
   }
 
-  @media (prefers-reduced-motion: no-preference) {
-    .tab {
-      transition: all 180ms ease;
-    }
-
-    .slide-panel {
-      animation: slide-fade 240ms cubic-bezier(0.4, 0, 0.2, 1);
-    }
+  .slide-in-left:global(.visible) {
+    transform: translateX(0);
+  }
+  .slide-in-left {
+    transform: translateX(-100px);
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    .tab {
-      transition: none;
-    }
+  .slide-in-right:global(.visible) {
+    transform: translateX(0);
+  }
+  .slide-in-right {
+    transform: translateX(100px);
+  }
 
-    .slide-panel {
-      animation: none;
+  .slide-in-bottom:global(.visible) {
+    transform: translateY(0);
+  }
+  .slide-in-bottom {
+    transform: translateY(50px);
+  }
+
+  .fade-in:global(.visible) {
+    opacity: 1;
+  }
+  .fade-in {
+    opacity: 0;
+  }
+
+  .zoom-in:global(.visible) {
+    transform: scale(1);
+  }
+  .zoom-in {
+    transform: scale(0.8);
+  }
+
+  /* stagger delays for grouped items */
+  .delay-1 {
+    transition-delay: 0.15s;
+  }
+  .delay-2 {
+    transition-delay: 0.3s;
+  }
+  .delay-3 {
+    transition-delay: 0.45s;
+  }
+
+  /* mobile - download stats stack, step number moves above heading */
+  @media (max-width: 768px) {
+    .download-stats {
+      flex-direction: column;
+    }
+    .divider {
+      width: 60px;
+      height: 1px;
+    }
+    .step {
+      padding-left: 0;
+      padding-top: 3rem;
+    }
+    .step-number {
+      top: -1rem;
     }
   }
 </style>
