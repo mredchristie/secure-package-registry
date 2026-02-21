@@ -8,21 +8,25 @@ import (
 	"os/signal"
 	"syscall"
 
+	"git.duti.dev/secure-package-registry/cmd/core-svc/server"
+	"git.duti.dev/secure-package-registry/pkg/logger"
+	"git.duti.dev/secure-package-registry/pkg/pkgdb"
 	"github.com/golang-migrate/migrate/v4"
 	pgxdriver "github.com/golang-migrate/migrate/v4/database/pgx/v5"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/rs/zerolog"
-	"secure-package-registry/pkg/logger"
 )
 
 const (
-	defaultDBHost     = "core_db"
-	defaultDBPort     = "5432"
-	defaultDBUser     = "core"
-	defaultDBPassword = "PleaseChangeMe"
-	defaultDBName     = "secure_registry"
+	defaultDBHost       = "core_db"
+	defaultDBPort       = "5432"
+	defaultDBUser       = "core"
+	defaultDBPassword   = "PleaseChangeMe"
+	defaultDBName       = "secure_registry"
+	defaultExternalPort = "8080"
+	defaultInternalPort = "8081"
 )
 
 var log zerolog.Logger
@@ -44,12 +48,14 @@ func main() {
 		cancel()
 	}()
 
-	// Get database connection info from environment
+	// Get configuration from environment
 	dbHost := getEnv("DB_HOST", defaultDBHost)
 	dbPort := getEnv("DB_PORT", defaultDBPort)
 	dbUser := getEnv("DB_USER", defaultDBUser)
 	dbPassword := getEnv("DB_PASSWORD", defaultDBPassword)
 	dbName := getEnv("DB_NAME", defaultDBName)
+	externalPort := getEnv("EXTERNAL_PORT", defaultExternalPort)
+	internalPort := getEnv("INTERNAL_PORT", defaultInternalPort)
 
 	// Build connection string
 	databaseURL := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable",
@@ -88,16 +94,41 @@ func main() {
 
 	log.Info().Msg("Migrations completed successfully")
 
-	// TODO: Initialize coredb client and start service
-	// queries := coredb.New(pool)
+	// Initialize pkgdb client
+	db := pkgdb.NewClient(pool)
 
-	// Keep running until shutdown
-	<-ctx.Done()
-	log.Info().Msg("Shutting down...")
+	// Create servers
+	externalServer := server.NewExternal("0.0.0.0:"+externalPort, db)
+	internalServer := server.NewInternal("0.0.0.0:" + internalPort)
+
+	// Start both servers
+	externalErr := externalServer.Start()
+	internalErr := internalServer.Start()
+
+	// Wait for shutdown signal or server errors
+	select {
+	case <-ctx.Done():
+		log.Info().Msg("Shutting down servers...")
+	case err := <-externalErr:
+		log.Fatal().Err(err).Msg("External server error")
+	case err := <-internalErr:
+		log.Fatal().Err(err).Msg("Internal server error")
+	}
+
+	// Graceful shutdown
+	shutdownCtx := context.Background()
+	if err := externalServer.Stop(shutdownCtx); err != nil {
+		log.Error().Err(err).Msg("Failed to stop external server")
+	}
+	if err := internalServer.Stop(shutdownCtx); err != nil {
+		log.Error().Err(err).Msg("Failed to stop internal server")
+	}
+
+	log.Info().Msg("Shutdown complete")
 }
 
 // runMigrations applies database migrations
-func runMigrations(ctx context.Context, databaseURL string) (err error) {
+func runMigrations(_ context.Context, databaseURL string) (err error) {
 	log.Info().Msg("Running database migrations")
 
 	// Open database connection using database/sql for migrations

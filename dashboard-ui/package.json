@@ -1,26 +1,40 @@
 {
-	"name": "dashboard-ui",
-	"private": true,
-	"version": "0.0.1",
-	"type": "module",
-	"scripts": {
-		"dev": "vite dev",
-		"build": "vite build",
-		"preview": "vite preview",
-		"prepare": "svelte-kit sync || echo ''",
-		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
-		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch"
-	},
-	"devDependencies": {
-		"@sveltejs/adapter-auto": "^7.0.0",
-		"@sveltejs/kit": "^2.50.1",
-		"@sveltejs/vite-plugin-svelte": "^6.2.4",
-		"svelte": "^5.48.2",
-		"svelte-check": "^4.3.5",
-		"typescript": "^5.9.3",
-		"vite": "^7.3.1"
-	},
-	"dependencies": {
-		"@biomejs/biome": "^2.4.2"
-	}
+  "devDependencies": {
+    "@biomejs/biome": "^2.3.15",
+    "@sveltejs/adapter-node": "^5.5.2",
+    "@sveltejs/kit": "^2.50.1",
+    "@sveltejs/vite-plugin-svelte": "^6.2.4",
+    "prettier": "^3.5.0",
+    "prettier-plugin-svelte": "^3.2.8",
+    "svelte": "^5.48.2",
+    "svelte-check": "^4.3.5",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1"
+  },
+  "name": "dashboard-ui",
+  "prettier": {
+    "overrides": [
+      {
+        "files": "*.svelte",
+        "options": {
+          "parser": "svelte"
+        }
+      }
+    ],
+    "plugins": [
+      "prettier-plugin-svelte"
+    ]
+  },
+  "private": true,
+  "scripts": {
+    "build": "vite build",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json && biome check && prettier --check '**/*.svelte'",
+    "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
+    "dev": "vite dev",
+    "format": "biome check --write && prettier --write '**/*.svelte'",
+    "prepare": "svelte-kit sync || echo ''",
+    "preview": "vite preview"
+  },
+  "type": "module",
+  "version": "0.0.1"
 }

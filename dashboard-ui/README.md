@@ -1,44 +1,11 @@
-# sv
+# Secure Package Registry Dashboard
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+The goal of this component is 3-fold:
 
-## Creating a project
+1. Allow users to easily search for and view information about packages in different ecosystems and their status in our
+   private registry.
+2. Provide documentation and instructions on how to use our private registry
+3. Allow users to request the verification of packages.
 
-If you're seeing this, you've probably already done this step. Congrats!
-
-```sh
-# create a new project
-npx sv create my-app
-```
-
-To recreate this project with the same configuration:
-
-```sh
-# recreate this project
-bun x sv create --template minimal --types ts --install bun dashboard-ui
-```
-
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a
-development server:
-
-```sh
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
-```
-
-## Building
-
-To create a production version of your app:
-
-```sh
-npm run build
-```
-
-You can preview the production build with `npm run preview`.
-
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target
-> environment.
+We are pre-MVP, meaning that the focus is on the core features. Customer-facing features like authentication are
+de-prioritized. We are only testing internally for now.

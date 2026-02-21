@@ -1,0 +1,86 @@
+components:
+    schemas:
+        Ecosystem:
+            enum:
+                - npm
+                - go
+                - cargo
+                - pypi
+            type: string
+        PackageSummary:
+            properties:
+                ecosystem:
+                    $ref: '#/components/schemas/Ecosystem'
+                identifier:
+                    type: string
+                latest_version:
+                    type: string
+            type: object
+        PackageVersion:
+            properties:
+                ecosystem:
+                    $ref: '#/components/schemas/Ecosystem'
+                identifier:
+                    type: string
+                latest:
+                    type: boolean
+                maintainer_notes:
+                    type: string
+                source:
+                    $ref: '#/components/schemas/Source'
+                tags:
+                    items:
+                        $ref: '#/components/schemas/TagInfo'
+                    type: array
+                trust_level:
+                    format: int32
+                    type: integer
+                version:
+                    type: string
+            type: object
+        PkgVtype:
+            enum:
+                - integer
+                - boolean
+                - float
+            type: string
+        SearchResult:
+            properties:
+                items:
+                    items:
+                        $ref: '#/components/schemas/PackageSummary'
+                    type: array
+            type: object
+        Source:
+            properties:
+                commit:
+                    type: string
+                tag:
+                    type: string
+                url:
+                    type: string
+            type: object
+        TagError:
+            properties:
+                Err: {}
+                Kind:
+                    type: integer
+                Tag:
+                    type: string
+            type: object
+        TagInfo:
+            properties:
+                data:
+                    format: byte
+                    type: string
+                label:
+                    type: string
+                value_type:
+                    $ref: '#/components/schemas/PkgVtype'
+            type: object
+info:
+    description: API for querying package information and metadata
+    title: Secure Package Registry API
+    version: 1.0.0
+openapi: 3.0.3
+paths: null

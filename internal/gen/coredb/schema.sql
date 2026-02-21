@@ -31,7 +31,7 @@ CREATE TYPE PKG_VTYPE AS ENUM ('integer', 'boolean', 'float');
 
 CREATE TABLE package_tag_types (
     id SERIAL PRIMARY KEY,
-    label TEXT NOT NULL,
+    label TEXT UNIQUE NOT NULL,
     description TEXT,
     value_type PKG_VTYPE NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP

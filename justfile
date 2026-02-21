@@ -5,19 +5,14 @@ _default:
 
 fix:
   #!/usr/bin/env bash
-  # Fix markdown formatting with Prettier
-  bunx prettier --write "**/*.md"
+  bunx prettier --write "**/*.md" --config ./.prettierrc
 
-  # Format Go
   go tool gofumpt -l -w .
 
-  # Lint Go
   go tool golangci-lint run --fix
 
-  # Lint JS/TS
-  bunx @biomejs/biome check --write
+  cd ./dashboard-ui/ && bun ci && bun run format && cd ..
 
-  # Lint and fix markdown with markdownlint-cli2
   git ls-files "*.md" | xargs -r bunx markdownlint-cli2 --fix
 
 
@@ -25,16 +20,10 @@ check:
   #!/usr/bin/env bash
   set -e
 
-  # Check Go formatting
   go tool gofumpt -l .
 
-  # Check Go linting
   go tool golangci-lint run
 
-  # Check JS/TS
-  bunx @biomejs/biome check
-
-  # Run checks in dashboard
   cd ./dashboard-ui/ && bun ci && bun run check && cd ..
 
   # Check markdown
@@ -47,6 +36,9 @@ test:
 generate:
   #!/usr/bin/env bash
   go generate ./...
+  # Generate API documentation
+  go run ./cmd/apigen
+  # TODO: Generate Typescript bindings from API docs
 
 help:
   @just --help

@@ -109,3 +109,135 @@ func (q *Queries) GetPackageVersionTags(ctx context.Context, arg GetPackageVersi
 	}
 	return items, nil
 }
+
+const insertPackage = `-- name: InsertPackage :one
+INSERT INTO packages (identifier, ecosystem, latest_version)
+VALUES ($1, $2, $3)
+ON CONFLICT (identifier) DO UPDATE SET
+    latest_version = EXCLUDED.latest_version,
+    updated_at = CURRENT_TIMESTAMP
+RETURNING id
+`
+
+type InsertPackageParams struct {
+	Identifier    string
+	Ecosystem     Ecosystem
+	LatestVersion string
+}
+
+func (q *Queries) InsertPackage(ctx context.Context, arg InsertPackageParams) (int32, error) {
+	row := q.db.QueryRow(ctx, insertPackage, arg.Identifier, arg.Ecosystem, arg.LatestVersion)
+	var id int32
+	err := row.Scan(&id)
+	return id, err
+}
+
+const insertPackageTag = `-- name: InsertPackageTag :exec
+INSERT INTO package_version_tags (package_version, tag_type, value)
+VALUES ($1, $2, $3)
+ON CONFLICT (package_version, tag_type) DO UPDATE SET
+    value = EXCLUDED.value
+`
+
+type InsertPackageTagParams struct {
+	PackageVersion int32
+	TagType        int32
+	Value          []byte
+}
+
+func (q *Queries) InsertPackageTag(ctx context.Context, arg InsertPackageTagParams) error {
+	_, err := q.db.Exec(ctx, insertPackageTag, arg.PackageVersion, arg.TagType, arg.Value)
+	return err
+}
+
+const insertPackageVersion = `-- name: InsertPackageVersion :one
+INSERT INTO package_versions (package_id, version, source_url)
+VALUES ($1, $2, $3)
+ON CONFLICT (package_id, version) DO NOTHING
+RETURNING id
+`
+
+type InsertPackageVersionParams struct {
+	PackageID int32
+	Version   string
+	SourceUrl string
+}
+
+func (q *Queries) InsertPackageVersion(ctx context.Context, arg InsertPackageVersionParams) (int32, error) {
+	row := q.db.QueryRow(ctx, insertPackageVersion, arg.PackageID, arg.Version, arg.SourceUrl)
+	var id int32
+	err := row.Scan(&id)
+	return id, err
+}
+
+const insertTagType = `-- name: InsertTagType :one
+INSERT INTO package_tag_types (label, description, value_type)
+VALUES ($1, $2, $3)
+ON CONFLICT (label) DO UPDATE SET
+    description = EXCLUDED.description,
+    value_type = EXCLUDED.value_type
+RETURNING id
+`
+
+type InsertTagTypeParams struct {
+	Label       string
+	Description pgtype.Text
+	ValueType   PkgVtype
+}
+
+func (q *Queries) InsertTagType(ctx context.Context, arg InsertTagTypeParams) (int32, error) {
+	row := q.db.QueryRow(ctx, insertTagType, arg.Label, arg.Description, arg.ValueType)
+	var id int32
+	err := row.Scan(&id)
+	return id, err
+}
+
+const searchPackages = `-- name: SearchPackages :many
+SELECT 
+    p.identifier,
+    p.ecosystem::text,
+    p.latest_version
+FROM packages p
+WHERE p.identifier ILIKE '%' || $1 || '%'
+  AND ($2::ECOSYSTEM IS NULL OR p.ecosystem = $2::ECOSYSTEM)
+ORDER BY p.identifier
+LIMIT $4 OFFSET ($3 - 1) * $4
+`
+
+type SearchPackagesParams struct {
+	Query     pgtype.Text
+	Ecosystem NullEcosystem
+	Page      interface{}
+	PageSize  int32
+}
+
+type SearchPackagesRow struct {
+	Identifier    string
+	PEcosystem    string
+	LatestVersion string
+}
+
+func (q *Queries) SearchPackages(ctx context.Context, arg SearchPackagesParams) ([]SearchPackagesRow, error) {
+	rows, err := q.db.Query(ctx, searchPackages,
+		arg.Query,
+		arg.Ecosystem,
+		arg.Page,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SearchPackagesRow
+	for rows.Next() {
+		var i SearchPackagesRow
+		if err := rows.Scan(&i.Identifier, &i.PEcosystem, &i.LatestVersion); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
