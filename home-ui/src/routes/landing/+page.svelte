@@ -1,102 +1,46 @@
 <script lang="ts">
-	// Landing page - sits between an ad and the main homepage
-	// Goal: get someone curious enough to click through
-	// Pre rendering line in +page.ts
+	// Landing page - entry point from ads / external links
+	// Simpler, faster-loading page; Header and global styles come from +layout.svelte
 </script>
 
-<div class="page">
-	<header>
-		<div class="logo">SPR</div>
-		<a href="/home" class="home-link">Visit homepage &rarr;</a>
-	</header>
+<main>
+	<section class="hero">
+		<div class="tag">Now in early access</div>
 
-	<main>
-		<section class="hero">
-			<div class="tag">Now in early access</div>
+		<h1>Your packages, verified.</h1>
 
-			<h1>Your packages, verified.</h1>
+		<p>
+			Supply chain attacks cost UK businesses billions every year. SPR catches malicious npm, Go,
+			Cargo and PyPI packages before they ever reach your codebase — using EBPF behavioral analysis
+			and source verification.
+		</p>
 
-			<p>
-				Supply chain attacks cost UK businesses billions every year. SPR catches malicious npm, Go,
-				Cargo and PyPI packages before they ever reach your codebase — using EBPF behavioral
-				analysis and source verification.
-			</p>
+		<a href="/" class="cta-button">See how it works &rarr;</a>
+	</section>
 
-			<a href="/home" class="cta-button">See how it works &rarr;</a>
-		</section>
+	<section class="proof">
+		<div class="stat">
+			<span class="number">704,102</span>
+			<span class="label">Malicious packages found in npm since 2019</span>
+		</div>
+		<div class="divider"></div>
+		<div class="stat">
+			<span class="number">£3.29M</span>
+			<span class="label">Average UK data breach cost</span>
+		</div>
+		<div class="divider"></div>
+		<div class="stat">
+			<span class="number">4</span>
+			<span class="label">Ecosystems covered — NPM, Go, Cargo, PyPI</span>
+		</div>
+	</section>
+</main>
 
-		<section class="proof">
-			<div class="stat">
-				<span class="number">704,102</span>
-				<span class="label">Malicious packages found in npm since 2019</span>
-			</div>
-			<div class="divider"></div>
-			<div class="stat">
-				<span class="number">£3.29M</span>
-				<span class="label">Average UK data breach cost</span>
-			</div>
-			<div class="divider"></div>
-			<div class="stat">
-				<span class="number">4</span>
-				<span class="label">Ecosystems covered — NPM, Go, Cargo, PyPI</span>
-			</div>
-		</section>
-	</main>
-
-	<footer>
-		<p>SPR &copy; 2026</p>
-	</footer>
-</div>
+<footer>
+	<p>SPR &copy; 2026</p>
+</footer>
 
 <style>
-	:global(*, *::before, *::after) {
-		box-sizing: border-box;
-		margin: 0;
-		padding: 0;
-	}
-
-	:global(body) {
-		font-family:
-			system-ui,
-			-apple-system,
-			sans-serif;
-		background: #fff;
-		color: #111;
-		line-height: 1.6;
-	}
-
-	.page {
-		min-height: 100vh;
-		display: flex;
-		flex-direction: column;
-	}
-
-	/* Header */
-	header {
-		padding: 1.5rem 0.75rem;
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-	}
-
-	.logo {
-		font-size: 3.5rem;
-		font-weight: 700;
-		color: #1d4ed8;
-	}
-
-	.home-link {
-		font-size: 0.875rem;
-		color: #6b7280;
-		text-decoration: none;
-		transition: color 0.2s;
-	}
-
-	.home-link:hover {
-		color: #1d4ed8;
-	}
-
-	/* Main */
 	main {
 		flex: 1;
 		display: flex;
@@ -107,7 +51,6 @@
 		gap: 4rem;
 	}
 
-	/* Hero */
 	.hero {
 		max-width: 860px;
 		text-align: center;
@@ -119,9 +62,9 @@
 
 	.tag {
 		display: inline-block;
-		background: #eff6ff;
-		color: #1d4ed8;
-		border: 1px solid #bfdbfe;
+		background: rgba(29, 78, 216, 0.08);
+		color: var(--accent);
+		border: 1px solid var(--card-border);
 		padding: 0.3rem 0.9rem;
 		border-radius: 20px;
 		font-size: 0.8rem;
@@ -132,20 +75,20 @@
 		font-size: 2.8rem;
 		font-weight: 700;
 		line-height: 1.15;
-		color: #111827;
+		color: var(--text-primary);
 		letter-spacing: -0.5px;
 	}
 
 	p {
 		font-size: 1.05rem;
-		color: #4b5563;
+		color: var(--text-secondary);
 		line-height: 1.7;
 	}
 
 	.cta-button {
 		display: inline-block;
-		background: #1d4ed8;
-		color: white;
+		background: var(--accent);
+		color: var(--bg-primary);
 		text-decoration: none;
 		padding: 0.8rem 1.75rem;
 		border-radius: 6px;
@@ -156,10 +99,9 @@
 	}
 
 	.cta-button:hover {
-		background: #1e40af;
+		background: var(--accent-hover);
 	}
 
-	/* Stats */
 	.proof {
 		display: flex;
 		align-items: center;
@@ -177,12 +119,12 @@
 	.number {
 		font-size: 1.75rem;
 		font-weight: 700;
-		color: #111827;
+		color: var(--text-primary);
 	}
 
 	.label {
 		font-size: 0.8rem;
-		color: #6b7280;
+		color: var(--text-secondary);
 		max-width: 130px;
 		line-height: 1.4;
 	}
@@ -190,12 +132,13 @@
 	.divider {
 		width: 1px;
 		height: 40px;
-		background: #e5e7eb;
+		background: var(--border);
 		flex-shrink: 0;
 	}
 
-	/* Footer */
+	/* global footer has border-top; landing page uses a lighter treatment */
 	footer {
+		border-top: none;
 		padding: 1.5rem 2rem;
 		display: flex;
 		justify-content: center;
@@ -204,6 +147,5 @@
 
 	footer p {
 		font-size: 0.8rem;
-		color: #9ca3af;
 	}
 </style>
