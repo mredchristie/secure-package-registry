@@ -1,29 +1,36 @@
 <script lang="ts">
+	// imports kinda self explanitory
 	import { onMount } from 'svelte';
 	import Header from '$lib/Header.svelte';
 	import favicon from '$lib/assets/favicon.svg';
-
+	// svelte 5 feature props - children contains all page content.
 	let { children } = $props();
+	// Theme state = true (dark mode) and = false (light mode)
 	let isDark = $state(true);
 
+	// Restore saved theme preference from browser storage
 	onMount(() => {
 		const saved = localStorage.getItem('isDark');
 		if (saved !== null) isDark = saved === 'true';
 	});
 
 	function toggleTheme() {
+		// Toggle theme and persist to localStorage
 		isDark = !isDark;
 		localStorage.setItem('isDark', isDark.toString());
 	}
 </script>
 
 <svelte:head>
+	<!-- Favicon for browser tab - this was already in the file when I rebased Mohammeds branch so kept it in -->
 	<link rel="icon" href={favicon} />
 </svelte:head>
 
 <div class="app" class:dark={isDark}>
 	<Header {isDark} onToggleTheme={toggleTheme} />
+	<!-- Header component with theme toggle (appears on all pages) -->
 	{@render children()}
+	<!-- Page content rendered here via {@render children()} -->
 </div>
 
 <style>
@@ -40,6 +47,8 @@
 	  --card-border:    #e5e7eb         / rgba(79,195,247,0.2)
 	*/
 
+	/*Light mode default*/
+
 	:global(.app) {
 		/* light mode */
 		--bg-primary: #fff;
@@ -52,16 +61,23 @@
 		--card-bg: #fff;
 		--card-border: #e5e7eb;
 
-		font-family: system-ui, -apple-system, sans-serif;
+		/* Base app styles */
+		font-family:
+			system-ui,
+			-apple-system,
+			sans-serif;
 		background: var(--bg-primary);
 		color: var(--text-primary);
 		line-height: 1.6;
 		min-height: 100vh;
+
+		/* Smooth theme transitions */
 		transition:
 			background 0.3s,
 			color 0.3s;
 	}
 
+	/* Dark Mode */
 	:global(.app.dark) {
 		/* dark mode */
 		--bg-primary: #0a0a0f;
@@ -75,12 +91,14 @@
 		--card-border: rgba(79, 195, 247, 0.2);
 	}
 
+	/*global resets*/
 	:global(*) {
 		margin: 0;
 		padding: 0;
 		box-sizing: border-box;
 	}
 
+	/* Prevent horizontal scroll, and Disable bounce effect on overscroll */
 	:global(body) {
 		margin: 0;
 		padding: 0;
@@ -88,20 +106,23 @@
 		overscroll-behavior: none;
 	}
 
+	/* Layout containers */
 	:global(.container) {
 		max-width: 1400px;
 		margin: 0 auto;
-		padding: 0;
+		padding: 0; /* Pages control their own padding */
 	}
 
 	:global(.section) {
-		padding: 6rem 0;
+		padding: 6rem 0; /* Vertical spacing between sections */
 	}
 
+	/* Alternate background for some variety */
 	:global(.section-alt) {
 		background: var(--bg-secondary);
 	}
 
+	/* Responsive font size */
 	:global(.section-title) {
 		font-size: clamp(2rem, 5vw, 3.5rem);
 		font-weight: 700;
@@ -121,6 +142,14 @@
 	}
 
 	/* scroll animations — IntersectionObserver toggles .visible on viewport enter/exit */
+	/* SCROLL ANIMATIONS
+	   How they work:
+	   1. .animate starts invisible (opacity: 0) with transform offset
+	   2. IntersectionObserver in page JS adds .visible class when element enters viewport
+	   3. CSS transition animates from hidden -> visible state
+	   4. .visible is removed on scroll-out so animations replay
+  	*/
+
 	:global(.animate) {
 		opacity: 0;
 		transition: all 1s cubic-bezier(0.16, 1, 0.3, 1);
