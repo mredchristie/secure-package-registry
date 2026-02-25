@@ -11,7 +11,8 @@
 			description:
 				'Multi-year state-sponsored operation discovered by chance when a developer noticed a 500ms SSH delay',
 			date: 'March 2024',
-			animation: 'slide-in-left'
+			animation: 'slide-in-left',
+			link: 'https://tukaani.org/xz/'
 		},
 		{
 			severity: '754+ packages',
@@ -19,7 +20,8 @@
 			description:
 				'Self-propagating worm that stole credentials and exposed 33K secrets across GitHub Actions',
 			date: 'November 2025',
-			animation: 'slide-in-right'
+			animation: 'slide-in-right',
+			link: 'https://www.aikido.dev/blog/github-actions-incident-shai-hulud-supply-chain-attack'
 		},
 		{
 			severity: '6 months',
@@ -27,7 +29,8 @@
 			description:
 				'Infrastructure compromised via hosting provider for half a year before detection',
 			date: '2025',
-			animation: 'slide-in-left'
+			animation: 'slide-in-left',
+			link: 'https://notepad-plus-plus.org/news/hijacked-incident-info-update/'
 		},
 		{
 			severity: 'First AI Attack',
@@ -35,7 +38,8 @@
 			description:
 				'AI-weaponized supply chain attack using Claude and Gemini with --dangerously-skip-permissions flags',
 			date: 'August 2025',
-			animation: 'slide-in-right'
+			animation: 'slide-in-right',
+			link: 'https://nx.dev/blog/s1ngularity-postmortem'
 		}
 	];
 
@@ -62,27 +66,33 @@
 		},
 		{
 			number: '02',
+			title: 'Reproducible Builds',
+			description: 'Built from source to ensure reprocdiucability.',
+			animation: 'slide-in-right'
+		},
+		{
+			number: '03',
 			title: 'Diff Check',
 			description:
 				'Compare the published package to the GitHub source. Catches backdoor injections like the event-stream attack.',
 			animation: 'slide-in-right'
 		},
 		{
-			number: '03',
+			number: '04',
 			title: 'EBPF Monitor',
 			description:
 				'Run in an isolated Podman container with kernel-level monitoring. Watches network calls, file access, and process spawning.',
 			animation: 'slide-in-left'
 		},
 		{
-			number: '04',
+			number: '05',
 			title: 'Behavioral Analysis',
 			description:
 				'Execute package in sandboxed environment. Monitor runtime behavior to detect malicious activity patterns.',
 			animation: 'slide-in-right'
 		},
 		{
-			number: '05',
+			number: '06',
 			title: 'Verified',
 			description: 'Package is added to your private registry. Safe to install.',
 			animation: 'slide-in-left'
@@ -177,13 +187,13 @@
 
 			{#if showIncidents}
 				<div class="incidents-grid">
-					{#each incidents as { severity, title, description, date }}
-						<div class="incident-card">
+					{#each incidents as { severity, title, description, date, link }}
+						<a class="incident-card" href={link} target="_blank" rel="noopener noreferrer">
 							<div class="severity-tag">{severity}</div>
 							<h3>{title}</h3>
 							<p>{description}</p>
 							<span class="incident-date">{date}</span>
-						</div>
+						</a>
 					{/each}
 				</div>
 			{/if}
@@ -358,6 +368,11 @@
 		grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
 		gap: 2rem;
 		margin-top: 3rem;
+	}
+	a.incident-card {
+		text-decoration: none;
+		color: inherit;
+		display: block;
 	}
 
 	.incident-card {
