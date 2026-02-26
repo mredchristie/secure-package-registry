@@ -67,7 +67,7 @@
 		{
 			number: '02',
 			title: 'Reproducible Builds',
-			description: 'Built from source to ensure reprocdiucability.',
+			description: 'Built from source to ensure Reproducibility.',
 			animation: 'slide-in-right'
 		},
 		{
@@ -175,7 +175,7 @@
 				Supply chain attacks exploit the trust developers place in open-source packages. When you
 				run <code>npm install</code>, malicious code can execute immediately—stealing credentials,
 				injecting backdoors, or compromising your entire infrastructure. These aren't theoretical
-				risks. Real attacks are happening right now.
+				risks, real attacks are happening right now...
 			</p>
 
 			<button
@@ -258,6 +258,101 @@
 </div>
 
 <style>
+	/* Layout helpers */
+	.container {
+		max-width: 1400px;
+		margin: 0 auto;
+		padding: 0;
+	}
+
+	.section {
+		padding: 6rem 0;
+	}
+
+	.section-alt {
+		background: var(--bg-secondary);
+	}
+
+	.section-title {
+		font-size: clamp(2rem, 5vw, 3.5rem);
+		font-weight: 700;
+		margin-bottom: 4rem;
+		text-align: center;
+	}
+
+	footer {
+		padding: 2rem;
+		text-align: center;
+		border-top: 1px solid var(--border);
+	}
+
+	footer p {
+		font-size: 0.875rem;
+		color: var(--text-secondary);
+	}
+
+	/* Scroll animations — IntersectionObserver toggles .visible on viewport enter/exit */
+	.animate {
+		opacity: 0;
+		transition: all 1s cubic-bezier(0.16, 1, 0.3, 1);
+	}
+
+	.animate.visible {
+		opacity: 1;
+	}
+
+	.slide-in-left {
+		transform: translateX(-100px);
+	}
+
+	.slide-in-left.visible {
+		transform: translateX(0);
+	}
+
+	.slide-in-right {
+		transform: translateX(100px);
+	}
+
+	.slide-in-right.visible {
+		transform: translateX(0);
+	}
+
+	.slide-in-bottom {
+		transform: translateY(50px);
+	}
+
+	.slide-in-bottom.visible {
+		transform: translateY(0);
+	}
+
+	.fade-in {
+		opacity: 0;
+	}
+
+	.fade-in.visible {
+		opacity: 1;
+	}
+
+	.zoom-in {
+		transform: scale(0.8);
+	}
+
+	.zoom-in.visible {
+		transform: scale(1);
+	}
+
+	.delay-1 {
+		transition-delay: 0.15s;
+	}
+
+	.delay-2 {
+		transition-delay: 0.3s;
+	}
+
+	.delay-3 {
+		transition-delay: 0.45s;
+	}
+
 	@keyframes fadeInUp {
 		from {
 			opacity: 0;
