@@ -4,8 +4,6 @@ author = ["readb5@cardiff.ac.uk"]
 date = "2026-02-23"
 +++
 
-## Summary
-
 ## Problem
 
 In the previous website development project (with Benjy, Ed and Antonio), a huge amount of merge conflicts were caused
