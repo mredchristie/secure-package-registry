@@ -6,7 +6,7 @@ services:
       - "127.0.0.1:5672:5672" # For testing purposes. Comment out in prod.
     environment:
       RABBITMQ_DEFAULT_USER: "admin"
-      RABBITMQ_DEFAULT_PASS: "${RABBITMQ_SECRET:-admin}"
+      RABBITMQ_DEFAULT_PASS: "admin"
   gitea:
     image: docker.gitea.com/gitea:1.25.4
     environment:
@@ -43,7 +43,7 @@ services:
           --username '${GITEA_ADMIN_USERNAME}' \
           --token-name "spr-admin-token" \
           --scopes "all" | sed "s/^.*: //" >/tmp/spr-admin-token.txt
-        valkey-cli -h valkey_db -p 6379 SETNX gitea:tokens:admin "$(cat /tmp/spr-admin-token.txt)"
+        valkey-cli -h valkey -p 6379 SETNX gitea:tokens:admin "$(cat /tmp/spr-admin-token.txt)"
         GITEA_SETUP
         /usr/bin/entrypoint /usr/bin/s6-svscan /etc/s6
     depends_on:
@@ -55,8 +55,8 @@ services:
     image: docker.io/minio/minio:latest
     command: server /data --console-address ":9001"
     environment:
-      - MINIO_ROOT_USER=internal
-      - MINIO_ROOT_PASSWORD=1ts0ktob3ins3cure
+      - MINIO_ROOT_USER=minio
+      - MINIO_ROOT_PASSWORD=minio
       - MINIO_BROWSER_REDIRECT_URL=http://127.0.0.1:7003
     ports:
       - "127.0.0.1:7003:9001"
@@ -83,12 +83,12 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-  valkey_db:
+  valkey:
     image: docker.io/valkey/valkey:9.0.2-alpine
     environment:
       - ALLOW_EMPTY_PASSWORD=true
     healthcheck:
-      test: ["CMD", "valkey-cli", "-a", "${VALKEY_PASSWORD}", "ping"]
+      test: ["CMD", "valkey-cli", "ping"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -99,14 +99,14 @@ services:
     image: docker.io/library/postgres:18
     restart: always
     environment:
-      - POSTGRES_USER=core
-      - POSTGRES_PASSWORD=${DB_PASSWORD:-PleaseChangeMe}
-      - POSTGRES_DB=secure_registry
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=core
     # volumes:
       # Uncomment when necessary
       # - ./data/core_db:/var/lib/postgresql/data:Z
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U core -d secure_registry -h localhost"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d core -h localhost"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -117,14 +117,19 @@ services:
     depends_on:
       core_db:
         condition: service_healthy
+      rabbitmq:
+        condition: service_started
     environment:
       - DB_HOST=core_db
-      - DB_USER=core
-      - DB_PASSWORD=${DB_PASSWORD:-PleaseChangeMe}
-      - DB_NAME=secure_registry
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_NAME=core
       - LOG_LEVEL=info
       - EXTERNAL_PORT=8080
       - INTERNAL_PORT=8081
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_USER=admin
+      - RABBITMQ_PASSWORD=admin
     restart: unless-stopped
 
   dashboard-ui:
@@ -147,12 +152,27 @@ services:
       - dashboard-ui
     restart: unless-stopped
 
-  seeder:
+  poller:
     build:
       context: .
-      dockerfile: cmd/seed/Containerfile
+      dockerfile: cmd/poller/Containerfile
     environment:
-      - DATABASE_URL=postgres://core:${DB_PASSWORD:-PleaseChangeMe}@core_db:5432/secure_registry?sslmode=disable
+      - DB_HOST=core_db
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_NAME=secure_registry
+      - LOG_LEVEL=info
+      - WORKER_COUNT=10
+      - RATE_LIMIT_RPS=0.28
+      - ECOSYSTEM=npm
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_USER=admin
+      - RABBITMQ_PASSWORD=admin
     depends_on:
-      - core_db
-      - core-svc
+      core_db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+      valkey:
+        condition: service_healthy
+    restart: unless-stopped
