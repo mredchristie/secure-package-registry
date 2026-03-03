@@ -1,0 +1,52 @@
+---
+version: 2
+interactions:
+- id: 0
+  request:
+    proto: HTTP/1.1
+    proto_major: 1
+    proto_minor: 1
+    content_length: 0
+    host: replicate.npmjs.com
+    url: https://replicate.npmjs.com
+    method: GET
+  response:
+    proto: HTTP/2.0
+    proto_major: 2
+    proto_minor: 0
+    content_length: -1
+    uncompressed: true
+    body: '{"db_name":"registry","engine":"npm-replicate","doc_count":3839846,"update_seq":99543684}'
+    headers:
+      Content-Type:
+      - application/json
+    status: 200 OK
+    code: 200
+    duration: 604.573659ms
+- id: 1
+  request:
+    proto: HTTP/1.1
+    proto_major: 1
+    proto_minor: 1
+    content_length: 0
+    host: replicate.npmjs.com
+    form:
+      limit:
+      - "100"
+      since:
+      - "99543684"
+    url: https://replicate.npmjs.com/_changes?limit=100&since=99543684
+    method: GET
+  response:
+    proto: HTTP/2.0
+    proto_major: 2
+    proto_minor: 0
+    content_length: -1
+    uncompressed: true
+    body: '{"results":[{"seq":99543686,"id":"@instantdb/react-native","changes":[{"rev":"2296-2817612b98d6c49fb94fe4515f0e7adb"}]},{"seq":99543688,"id":"@aztec/aztec.js","changes":[{"rev":"953-ec0e006c78fc079150dcbc043665cef6"}]}],"last_seq":99543688}'
+    headers:
+      Content-Type:
+      - application/json
+    status: 200 OK
+    code: 200
+    duration: 232.460879ms

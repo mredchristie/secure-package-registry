@@ -1,0 +1,37 @@
+# Build stage
+FROM golang:1.25.6-alpine AS builder
+
+WORKDIR /app
+
+# Install dependencies
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Build binary
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /app/poller ./cmd/poller
+
+# Runtime stage (Alpine for debugging)
+FROM alpine:3.20
+
+# Install ca-certificates for HTTPS calls
+RUN apk add --no-cache ca-certificates
+
+# Create non-root user
+RUN adduser -D -u 1000 poller
+
+WORKDIR /app
+
+# Copy binary from builder
+COPY --from=builder /app/poller ./poller
+
+# Set ownership
+RUN chown -R poller:poller ./poller
+
+# Switch to non-root user
+USER poller
+
+# Run the service
+ENTRYPOINT ["./poller"]

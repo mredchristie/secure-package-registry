@@ -1,0 +1,30 @@
+---
+version: 2
+interactions:
+- id: 0
+  request:
+    proto: HTTP/1.1
+    proto_major: 1
+    proto_minor: 1
+    content_length: 0
+    host: replicate.npmjs.com
+    form:
+      limit:
+      - "5"
+      since:
+      - "99543500"
+    url: https://replicate.npmjs.com/_changes?limit=5&since=99543500
+    method: GET
+  response:
+    proto: HTTP/2.0
+    proto_major: 2
+    proto_minor: 0
+    content_length: -1
+    uncompressed: true
+    body: '{"results":[{"seq":99543502,"id":"@factory/cli-win32-x64-baseline","changes":[{"rev":"32-474eb185f1260187605c5341899d8dcc"}]},{"seq":99543504,"id":"@devvit/linkers","changes":[{"rev":"3622-38587fe362e7fa279e86e28f1314ace8"}]},{"seq":99543506,"id":"@devvit/test","changes":[{"rev":"227-d25bdea80cc12fb08b6107ad96c47067"}]},{"seq":99543510,"id":"@aztec/l1-artifacts","changes":[{"rev":"956-3e33a9ff00b6d9c31fa38b0378cb54f6"}]},{"seq":99543512,"id":"@devvit/builders","changes":[{"rev":"3630-1e22e5d0b7c17c178503143354ed31a1"}]}],"last_seq":99543512}'
+    headers:
+      Content-Type:
+      - application/json
+    status: 200 OK
+    code: 200
+    duration: 645.054204ms
