@@ -102,7 +102,7 @@ type Package struct {
 	ID                   int32
 	Identifier           string
 	Ecosystem            Ecosystem
-	LatestVersion        string
+	LatestVersion        pgtype.Text
 	MaintainerTrustLevel pgtype.Int4
 	CreatedAt            pgtype.Timestamptz
 	UpdatedAt            pgtype.Timestamptz

@@ -128,7 +128,7 @@ func seedPackages(ctx context.Context, queries *coredb.Queries, tagTypeIDs map[s
 		packageID, err := queries.InsertPackage(ctx, coredb.InsertPackageParams{
 			Identifier:    pkg.Identifier,
 			Ecosystem:     coredb.Ecosystem(pkg.Ecosystem),
-			LatestVersion: pkg.LatestVersion,
+			LatestVersion: pgtype.Text{String: pkg.LatestVersion, Valid: true},
 		})
 		if err != nil {
 			return fmt.Errorf("failed to insert package %s: %w", pkg.Identifier, err)

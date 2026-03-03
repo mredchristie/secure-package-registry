@@ -53,10 +53,14 @@ func (c *Client) SearchPackages(ctx context.Context, params SearchParams) (*Sear
 	// Build result
 	items := make([]PackageSummary, 0, len(rows))
 	for _, row := range rows {
+		var latestVersion string
+		if row.LatestVersion.Valid {
+			latestVersion = row.LatestVersion.String
+		}
 		items = append(items, PackageSummary{
 			Identifier:    row.Identifier,
 			Ecosystem:     Ecosystem(row.PEcosystem),
-			LatestVersion: row.LatestVersion,
+			LatestVersion: latestVersion,
 		})
 	}
 

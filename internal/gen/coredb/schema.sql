@@ -4,7 +4,7 @@ CREATE TABLE packages (
     id SERIAL PRIMARY KEY,
     identifier TEXT UNIQUE NOT NULL,
     ecosystem ECOSYSTEM NOT NULL,
-    latest_version TEXT NOT NULL,
+    latest_version TEXT,
     maintainer_trust_level INTEGER DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP

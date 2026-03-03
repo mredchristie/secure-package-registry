@@ -122,7 +122,7 @@ RETURNING id
 type InsertPackageParams struct {
 	Identifier    string
 	Ecosystem     Ecosystem
-	LatestVersion string
+	LatestVersion pgtype.Text
 }
 
 func (q *Queries) InsertPackage(ctx context.Context, arg InsertPackageParams) (int32, error) {
@@ -153,7 +153,8 @@ func (q *Queries) InsertPackageTag(ctx context.Context, arg InsertPackageTagPara
 const insertPackageVersion = `-- name: InsertPackageVersion :one
 INSERT INTO package_versions (package_id, version, source_url)
 VALUES ($1, $2, $3)
-ON CONFLICT (package_id, version) DO NOTHING
+ON CONFLICT (package_id, version) DO UPDATE SET
+    source_url = EXCLUDED.source_url
 RETURNING id
 `
 
@@ -192,6 +193,72 @@ func (q *Queries) InsertTagType(ctx context.Context, arg InsertTagTypeParams) (i
 	return id, err
 }
 
+const listPackageVersions = `-- name: ListPackageVersions :many
+SELECT version
+FROM package_versions
+WHERE package_id = $1
+`
+
+func (q *Queries) ListPackageVersions(ctx context.Context, packageID int32) ([]string, error) {
+	rows, err := q.db.Query(ctx, listPackageVersions, packageID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var version string
+		if err := rows.Scan(&version); err != nil {
+			return nil, err
+		}
+		items = append(items, version)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPackagesByEcosystem = `-- name: ListPackagesByEcosystem :many
+
+SELECT id, identifier, ecosystem, latest_version
+FROM packages
+WHERE ecosystem = $1
+`
+
+type ListPackagesByEcosystemRow struct {
+	ID            int32
+	Identifier    string
+	Ecosystem     Ecosystem
+	LatestVersion pgtype.Text
+}
+
+// Poller queries
+func (q *Queries) ListPackagesByEcosystem(ctx context.Context, ecosystem Ecosystem) ([]ListPackagesByEcosystemRow, error) {
+	rows, err := q.db.Query(ctx, listPackagesByEcosystem, ecosystem)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPackagesByEcosystemRow
+	for rows.Next() {
+		var i ListPackagesByEcosystemRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Identifier,
+			&i.Ecosystem,
+			&i.LatestVersion,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const searchPackages = `-- name: SearchPackages :many
 SELECT 
     p.identifier,
@@ -214,7 +281,7 @@ type SearchPackagesParams struct {
 type SearchPackagesRow struct {
 	Identifier    string
 	PEcosystem    string
-	LatestVersion string
+	LatestVersion pgtype.Text
 }
 
 func (q *Queries) SearchPackages(ctx context.Context, arg SearchPackagesParams) ([]SearchPackagesRow, error) {
@@ -240,4 +307,20 @@ func (q *Queries) SearchPackages(ctx context.Context, arg SearchPackagesParams) 
 		return nil, err
 	}
 	return items, nil
+}
+
+const updatePackageLatestVersion = `-- name: UpdatePackageLatestVersion :exec
+UPDATE packages
+SET latest_version = $2, updated_at = CURRENT_TIMESTAMP
+WHERE id = $1
+`
+
+type UpdatePackageLatestVersionParams struct {
+	ID            int32
+	LatestVersion pgtype.Text
+}
+
+func (q *Queries) UpdatePackageLatestVersion(ctx context.Context, arg UpdatePackageLatestVersionParams) error {
+	_, err := q.db.Exec(ctx, updatePackageLatestVersion, arg.ID, arg.LatestVersion)
+	return err
 }

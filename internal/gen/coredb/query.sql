@@ -50,7 +50,8 @@ RETURNING id;
 -- name: InsertPackageVersion :one
 INSERT INTO package_versions (package_id, version, source_url)
 VALUES ($1, $2, $3)
-ON CONFLICT (package_id, version) DO NOTHING
+ON CONFLICT (package_id, version) DO UPDATE SET
+    source_url = EXCLUDED.source_url
 RETURNING id;
 
 -- name: InsertTagType :one
@@ -66,3 +67,20 @@ INSERT INTO package_version_tags (package_version, tag_type, value)
 VALUES ($1, $2, $3)
 ON CONFLICT (package_version, tag_type) DO UPDATE SET
     value = EXCLUDED.value;
+
+-- Poller queries
+
+-- name: ListPackagesByEcosystem :many
+SELECT id, identifier, ecosystem, latest_version
+FROM packages
+WHERE ecosystem = $1;
+
+-- name: ListPackageVersions :many
+SELECT version
+FROM package_versions
+WHERE package_id = $1;
+
+-- name: UpdatePackageLatestVersion :exec
+UPDATE packages
+SET latest_version = $2, updated_at = CURRENT_TIMESTAMP
+WHERE id = $1;
