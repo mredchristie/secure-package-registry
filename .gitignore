@@ -31,3 +31,6 @@ npm-debug.log*
 /bin
 # Compose output
 data
+
+context-references
+AGENTS.md

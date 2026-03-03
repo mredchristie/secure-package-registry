@@ -21,7 +21,7 @@ check:
   #!/usr/bin/env bash
   set -e
 
-  go tool gofumpt -l .
+  go tool gofumpt -e -l .
 
   go tool golangci-lint run
 
