@@ -337,6 +337,7 @@ services:
     entrypoint: ["/bin/sh","-c"]
     environment:
       # To use this container, you need to provide one, not really the kind of thing I can set a default for
+      # A token has been saved as a repository secret
       - GH_TOKEN=${GH_TOKEN}
     command:
       - |
