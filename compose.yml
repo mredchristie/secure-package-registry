@@ -302,4 +302,79 @@ services:
       - "127.0.0.1:8000:8000"
     volumes:
       - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - core-svc
+      - dashboard-ui
     restart: unless-stopped
+
+  poller:
+    build:
+      context: .
+      dockerfile: cmd/poller/Containerfile
+    environment:
+      - DB_HOST=core_db
+      - DB_USER=postgres
+      - DB_PASSWORD=postgres
+      - DB_NAME=secure_registry
+      - LOG_LEVEL=info
+      - WORKER_COUNT=10
+      - RATE_LIMIT_RPS=0.28
+      - ECOSYSTEM=npm
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_USER=admin
+      - RABBITMQ_PASSWORD=admin
+    depends_on:
+      core_db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
+      valkey:
+        condition: service_healthy
+    restart: unless-stopped
+
+  seed-registry:
+    image: docker.io/library/node:23-alpine
+    entrypoint: ["/bin/sh","-c"]
+    environment:
+      # To use this container, you need to provide one, not really the kind of thing I can set a default for
+      - GH_TOKEN=${GH_TOKEN}
+    command:
+      - |
+        set -x
+        apk add --no-cache curl valkey-cli github-cli tar
+
+        # I believe there is some block on setting environment variables in the command: section of the compose file, so we will have to a temp file instead.
+        while true; do
+          valkey-cli -h valkey GET gitea:tokens:admin > /tmp/gitea_token.txt
+          if [ -s /tmp/gitea_token.txt ]; then
+            break
+          fi
+          sleep 2
+        done
+
+        cat >> ~/.npmrc << NPMRC_SETUP
+        registry=http://gitea:3000/api/packages/admin/npm/
+        //gitea:3000/api/packages/admin/npm/:_authToken=$(cat /tmp/gitea_token.txt)
+        always-auth=true
+        NPMRC_SETUP
+
+        cat ~/.npmrc
+
+        mkdir -p /tmp/artifacts
+        cd /tmp/artifacts
+        gh run download 22155394248 --repo BenjyRead/Registry-Reproducible-Builds -n "svelte-5.48.2-build"
+        ls
+
+        tar -xzf svelte-5.48.2.tgz
+        ls
+        cd package
+
+        npm config get registry
+
+        npm publish
+
+    depends_on:
+      gitea:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
