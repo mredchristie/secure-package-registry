@@ -5,7 +5,7 @@
 	import Header from '$lib/Header.svelte';
 
 	// svelte 5 feature props - children contains all page content.
-	let { children } = $props();
+	let { children, data } = $props();
 	// Theme state = true (dark mode) and = false (light mode)
 	let isDark = $state(true);
 
@@ -28,7 +28,7 @@
 </svelte:head>
 
 <div class="app" class:dark={isDark}>
-	<Header {isDark} onToggleTheme={toggleTheme} />
+	<Header {isDark} onToggleTheme={toggleTheme} isLoggedIn={data.isLoggedIn} />
 	<!-- Header component with theme toggle (appears on all pages) -->
 	{@render children()}
 	<!-- Page content rendered here via {@render children()} -->
@@ -62,6 +62,9 @@
 		--border: #e5e7eb;
 		--card-bg: #fff;
 		--card-border: #e5e7eb;
+		/* wb = White Black */
+		--wb-bg: white;
+		--wb-bg-invert: black;
 
 		font-family:
 			system-ui,
@@ -87,6 +90,8 @@
 		--border: #2a2a3e;
 		--card-bg: rgba(26, 26, 46, 0.5);
 		--card-border: rgba(79, 195, 247, 0.2);
+		--wb-bg: black;
+		--wb-bg-invert: white;
 	}
 
 	/* Universal resets — intentionally global */

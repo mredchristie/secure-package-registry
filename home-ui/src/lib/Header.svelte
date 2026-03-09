@@ -1,23 +1,34 @@
 <script lang="ts">
+	// import { browser } from '$app/environment';
+	// import { isLoggedIn } from './utils/auth';
+
 	export let isDark = true;
 	export let onToggleTheme: () => void;
+
+	import { PUBLIC_DASHBOARD_BASE_URL } from '$env/static/public';
 </script>
 
 <header>
-	<div class="logo">SPR</div>
+	<div class="header-left">
+		<div class="logo">
+			<a class="clear-a-stylings" href="/">SPR</a>
+		</div>
+		<a href="{PUBLIC_DASHBOARD_BASE_URL}/docs" class="nav-link">Docs</a>
+		<a href="{PUBLIC_DASHBOARD_BASE_URL}/pricing" class="nav-link">Pricing</a>
+	</div>
 	<div class="header-right">
 		<button class="theme-toggle" on:click={onToggleTheme}>
 			{isDark ? 'Light' : 'Dark'}
 		</button>
-		<a href="/landing" class="nav-link">Get Started</a>
+		<a href="{PUBLIC_DASHBOARD_BASE_URL}/" class="navbar-button"> Get Started </a>
 	</div>
 </header>
 
 <style>
 	header {
-		padding: 1.5rem 2rem;
+		padding: 0.75rem 2.5rem;
 		display: flex;
-		justify-content: space-between;
+		/* justify-content: space-between; */
 		align-items: center;
 		position: sticky;
 		top: 0;
@@ -25,6 +36,25 @@
 		border-bottom: 1px solid var(--border);
 		z-index: 100;
 		backdrop-filter: blur(10px);
+	}
+
+	.navbar-button {
+		background: var(--accent);
+		color: var(--bg-primary);
+		text-decoration: none;
+		padding: 0.5rem 1.75rem;
+		border-radius: 6px;
+		font-size: 0.95rem;
+		font-weight: 500;
+		transition: background 0.2s;
+		font-size: 0.875rem;
+		font-weight: 500;
+		transition: color 0.3s;
+	}
+
+	.clear-a-stylings {
+		text-decoration: none;
+		color: inherit;
 	}
 
 	.logo {
@@ -36,7 +66,14 @@
 	.header-right {
 		display: flex;
 		align-items: center;
-		gap: 1.5rem;
+		gap: 0.75rem;
+		margin-left: auto;
+	}
+
+	.header-left {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
 	}
 
 	.theme-toggle {
@@ -44,13 +81,19 @@
 		border: none;
 		font-size: 0.875rem;
 		font-weight: 500;
-		color: var(--text-secondary);
-		cursor: pointer;
-		transition: color 0.3s;
-	}
+		color: var(--wb-bg);
 
-	.theme-toggle:hover {
-		color: var(--accent);
+		background: var(--wb-bg-invert);
+		text-decoration: none;
+		padding: 0.5rem;
+		border-radius: 6px;
+		font-size: 0.95rem;
+		font-weight: 500;
+		transition: background 0.2s;
+		font-size: 0.875rem;
+		font-weight: 500;
+		transition: color 0.3s;
+		cursor: pointer;
 	}
 
 	.nav-link {

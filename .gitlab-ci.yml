@@ -5,6 +5,10 @@ image: golang:1.25.6
 
 check:
   stage: check
+  variables:
+    PUBLIC_HOME_BASE_URL: "localhost:5173"
+    PUBLIC_DASHBOARD_BASE_URL: "localhost:5174"
+
   script:
     - apt update
     - apt install -y just unzip

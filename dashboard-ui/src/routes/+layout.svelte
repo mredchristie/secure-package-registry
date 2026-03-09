@@ -1,79 +1,107 @@
 <script lang="ts">
+  // imports kinda self explanitory
+  import { onMount } from "svelte";
+  import Header from "$lib/Header.svelte";
   import favicon from "$lib/assets/favicon.svg";
+  // svelte 5 feature props - children contains all page content.
+  let { children, data } = $props();
+  // Theme state = true (dark mode) and = false (light mode)
+  let isDark = $state(true);
 
-  const { children } = $props();
+  // Restore saved theme preference from browser storage
+  onMount(() => {
+    const saved = localStorage.getItem("isDark");
+    if (saved !== null) isDark = saved === "true";
+  });
+
+  function toggleTheme() {
+    // Toggle theme and persist to localStorage
+    isDark = !isDark;
+    localStorage.setItem("isDark", isDark.toString());
+  }
 </script>
 
 <svelte:head>
+  <!-- Favicon for browser tab - this was already in the file when I rebased Mohammeds branch so kept it in -->
   <link rel="icon" href={favicon} />
-  <title>Secure Package Registry</title>
 </svelte:head>
 
-<div class="app">
-  <header>
-    <div class="header-content">
-      <h1>🔒 Secure Package Registry</h1>
-    </div>
-  </header>
-
-  <main>
-    {@render children()}
-  </main>
-
-  <footer>
-    <p>Secure Package Registry Dashboard</p>
-  </footer>
+<div class="app" class:dark={isDark}>
+  <Header {isDark} onToggleTheme={toggleTheme} isLoggedIn={data.isLoggedIn} />
+  <!-- Header component with theme toggle (appears on all pages) -->
+  {@render children()}
+  <!-- Page content rendered here via {@render children()} -->
 </div>
 
 <style>
-  :global(*, *::before, *::after) {
+  /*
+      CSS custom properties defined here cascade to all child pages.
+      Only variables live here — all other styles belong in their own files.
+
+      Color variable reference — light / dark
+      --bg-primary:     #fff            / #0a0a0f
+      --bg-secondary:   #fafafa         / #1a1a2e
+      --text-primary:   #111            / #fff
+      --text-secondary: #4b5563         / #ccc
+      --accent:         #1d4ed8 (blue)  / #4fc3f7 (sky blue)
+      --accent-hover:   #1e40af         / #51cf66 (green)
+      --border:         #e5e7eb         / #2a2a3e
+      --card-bg:        #fff            / rgba(26,26,46,0.5)
+      --card-border:    #e5e7eb         / rgba(79,195,247,0.2)
+    */
+
+  /* Light mode */
+  .app {
+    --bg-primary: #fff;
+    --bg-secondary: #fafafa;
+    --text-primary: #111;
+    --text-secondary: #4b5563;
+    --accent: #1d4ed8;
+    --accent-hover: #1e40af;
+    --border: #e5e7eb;
+    --card-bg: #fff;
+    --card-border: #e5e7eb;
+    /* wb = White Black */
+    --wb-bg: white;
+    --wb-bg-invert: black;
+
+    font-family:
+      system-ui,
+      -apple-system,
+      sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    line-height: 1.6;
+    min-height: 100vh;
+    transition:
+      background 0.3s,
+      color 0.3s;
+  }
+
+  /* Dark mode */
+  .app.dark {
+    --bg-primary: #0a0a0f;
+    --bg-secondary: #1a1a2e;
+    --text-primary: #fff;
+    --text-secondary: #ccc;
+    --accent: #4fc3f7;
+    --accent-hover: #51cf66;
+    --border: #2a2a3e;
+    --card-bg: rgba(26, 26, 46, 0.5);
+    --card-border: rgba(79, 195, 247, 0.2);
+    --wb-bg: black;
+    --wb-bg-invert: white;
+  }
+
+  /* Universal resets — intentionally global */
+  :global(*) {
+    margin: 0;
+    padding: 0;
     box-sizing: border-box;
   }
 
-  :global(html, body) {
-    margin: 0;
-    padding: 0;
-    height: 100%;
-  }
-
-  .app {
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-  }
-
-  header {
-    background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%);
-    color: white;
-    padding: 1rem 2rem;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  }
-
-  .header-content {
-    max-width: 800px;
-    margin: 0 auto;
-  }
-
-  header h1 {
-    margin: 0;
-    font-size: 1.5rem;
-    font-weight: 600;
-  }
-
-  main {
-    flex: 1;
-    padding: 2rem;
-  }
-
-  footer {
-    background: #263238;
-    color: #90a4ae;
-    padding: 1rem;
-    text-align: center;
-    font-size: 0.875rem;
-  }
-
-  footer p {
-    margin: 0;
+  :global(body) {
+    overflow-x: hidden;
+    overscroll-behavior: none;
   }
 </style>
