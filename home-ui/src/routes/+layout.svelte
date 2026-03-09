@@ -1,8 +1,9 @@
 <script lang="ts">
 	// imports kinda self explanitory
 	import { onMount } from 'svelte';
-	import Header from '$lib/Header.svelte';
 	import favicon from '$lib/assets/favicon.svg';
+	import Header from '$lib/Header.svelte';
+
 	// svelte 5 feature props - children contains all page content.
 	let { children } = $props();
 	// Theme state = true (dark mode) and = false (light mode)

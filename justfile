@@ -13,6 +13,7 @@ fix:
   go tool golangci-lint run --fix
 
   cd ./dashboard-ui/ && bun ci && bun run format && cd ..
+  cd ./home-ui/ && bun ci && bun run format && cd ..
 
   git ls-files "*.md" | xargs -r bunx markdownlint-cli2 --fix
 
@@ -26,6 +27,7 @@ check:
   go tool golangci-lint run
 
   cd ./dashboard-ui/ && bun ci && bun run check && cd ..
+  cd ./home-ui/ && bun ci && bun run check && cd ..
 
   # Check markdown
   bunx prettier -c "**/*.md" --config ./.prettierrc
