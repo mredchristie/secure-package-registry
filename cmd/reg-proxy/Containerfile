@@ -1,0 +1,21 @@
+# Build stage
+FROM golang:1.25.6-alpine AS builder
+
+WORKDIR /app
+
+COPY . .
+
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /app/proxy
+
+# Runtime stage
+FROM alpine:3.20
+
+WORKDIR /app
+
+COPY --from=builder /app/proxy ./proxy
+
+RUN chmod +x ./proxy
+
+EXPOSE 7002
+
+CMD ["./proxy"]
