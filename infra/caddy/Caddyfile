@@ -2,12 +2,13 @@
 	auto_https off
 }
 
-:8000 {
-	route /api/v1/svc/* {
-		reverse_proxy core-svc:8080
-	}
-
-	route /* {
-		reverse_proxy dashboard-ui:3000
-	}
+:3001 {
+	reverse_proxy dashboard-ui:3000
 }
+
+:8000 {
+    route /api/v1/svc/* {
+        reverse_proxy core-svc:8080
+    }
+}
+

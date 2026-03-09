@@ -136,20 +136,30 @@ services:
     build:
       context: ./dashboard-ui
       dockerfile: Containerfile
-    environment:
-      - PORT=3000
-      - HOST=0.0.0.0
     restart: unless-stopped
+    expose:
+      - "3000"
+
+  home-ui:
+    build:
+      context: ./home-ui
+      dockerfile: Containerfile
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+
 
   caddy:
     image: docker.io/caddy:2-alpine
     ports:
+      - "127.0.0.1:3001:3001"
       - "127.0.0.1:8000:8000"
     volumes:
       - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
     depends_on:
       - core-svc
       - dashboard-ui
+      - home-ui
     restart: unless-stopped
 
   poller:
@@ -176,3 +186,4 @@ services:
       valkey:
         condition: service_healthy
     restart: unless-stopped
+
