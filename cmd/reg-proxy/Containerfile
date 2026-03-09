@@ -3,9 +3,14 @@ FROM golang:1.25.6-alpine AS builder
 
 WORKDIR /app
 
+# Install dependencies
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Copy source code
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /app/proxy
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o /app/proxy ./cmd/reg-proxy
 
 # Runtime stage
 FROM alpine:3.20

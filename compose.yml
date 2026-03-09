@@ -354,8 +354,8 @@ services:
         done
 
         cat >> ~/.npmrc << NPMRC_SETUP
-        registry=http://gitea:3000/api/packages/admin/npm/
-        //gitea:3000/api/packages/admin/npm/:_authToken=$(cat /tmp/gitea_token.txt)
+        registry=http://gitea-reverse-proxy:7002/api/packages/admin/npm/
+        //gitea-reverse-proxy:7002/api/packages/admin/npm/:_authToken=$(cat /tmp/gitea_token.txt)
         always-auth=true
         NPMRC_SETUP
 
