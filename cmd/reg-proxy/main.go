@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -19,37 +18,40 @@ func main() {
 	}
 
 	// // Create a reverse proxy instance pointing to the target
-	// proxy := httputil.NewSingleHostReverseProxy(target)
+	proxy := httputil.NewSingleHostReverseProxy(target)
 
-	proxy := &httputil.ReverseProxy{
-		Director: func(req *http.Request) {
-			log.Info().Msg(fmt.Sprintf("Received Request: %s %s", req.Method, req.URL.Path))
-			req.URL.Scheme = target.Scheme
-			req.URL.Host = target.Host
-			req.URL.Path = target.Path + req.URL.Path
-
-			if strings.HasPrefix(req.URL.Path, "/api/packages/") {
-
-				req.Header.Set("X-Block-Download", "true")
-				log.Info().Msg(fmt.Sprintf("Blocking Request: %s", req.URL.Path))
-
-			}
-		},
-		ModifyResponse: func(resp *http.Response) error {
-			if resp.Request.Header.Get("X-Block-Download") == "true" {
-				log.Println("Blocking package pull:", resp.Request.URL.Path)
-
-				resp.StatusCode = http.StatusForbidden
-				resp.Status = "403 Forbidden"
-				resp.Header.Set("Content-Type", "text/plain")
-				resp.Body = http.NoBody
-			}
-
-			return nil
-		},
+	proxy.Director = func(req *http.Request) {
+		req.URL.Scheme = target.Scheme
+		req.URL.Host = target.Host
+		req.URL.Path = target.Path + req.URL.Path
 	}
 
+	handler := http.HandlerFunc(
+		func(wri http.ResponseWriter, req *http.Request,
+		) {
+			log.Info().Msgf("Received Request: %s %s", req.Method, req.URL.Path)
+
+			if !strings.HasPrefix(req.URL.Path, "/api/packages/") {
+				proxy.ServeHTTP(wri, req)
+				return
+			}
+
+			auth := req.Header.Get("Authorization")
+			log.Info().Msgf("Authorization Header: %s", auth)
+			token, isFound := strings.CutPrefix(auth, "Basic ")
+
+			if !isFound || token != "securetoken" {
+				log.Info().Msgf("Blocking Request: %s %s, Invalid Token: %s", req.Method, req.URL.Path, token)
+				http.Error(wri, "Forbidden", http.StatusForbidden)
+				return
+			}
+
+			log.Info().Msgf("Accepting Request: %s %s, token: %s", req.Method, req.URL.Path, token)
+			req.Header.Del("Authorization")
+			proxy.ServeHTTP(wri, req)
+		})
+
 	log.Info().Msg("Starting proxy server on :7002")
-	err = http.ListenAndServe(":7002", proxy)
+	err = http.ListenAndServe(":7002", handler)
 	log.Fatal().Err(err).Msg("proxy server failed")
 }
