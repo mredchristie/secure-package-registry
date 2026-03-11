@@ -1,13 +1,16 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"io"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 
 	"git.duti.dev/secure-package-registry/internal/gen/coredb"
@@ -70,6 +73,36 @@ func main() {
 		req.URL.Scheme = target.Scheme
 		req.URL.Host = target.Host
 		req.URL.Path = target.Path + req.URL.Path
+	}
+
+	// Some metadata uses gitea:3000 instead of localhost:7002, so pulling breaks
+	// This rewrites anything like that
+	proxy.ModifyResponse = func(resp *http.Response) error {
+		ct := resp.Header.Get("Content-Type")
+
+		// Only modify npm metadata JSON
+		if !strings.Contains(ct, "application/json") {
+			return nil
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return err
+		}
+		resp.Body.Close()
+
+		// Replace internal hostname with proxy host
+		rewritten := bytes.ReplaceAll(
+			body,
+			[]byte("http://gitea:3000"),
+			[]byte("http://localhost:7002"),
+		)
+
+		resp.Body = io.NopCloser(bytes.NewBuffer(rewritten))
+		resp.ContentLength = int64(len(rewritten))
+		resp.Header.Set("Content-Length", strconv.Itoa(len(rewritten)))
+
+		return nil
 	}
 
 	handler := http.HandlerFunc(

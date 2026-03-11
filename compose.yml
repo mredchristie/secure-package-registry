@@ -374,6 +374,16 @@ services:
 
         npm publish
 
+        cd ..
+        mkdir pkg
+        cd pkg
+
+        npm pack is-number@6.0.0 --registry https://registry.npmjs.org
+        tar -xzf is-number-6.0.0.tgz
+        cd package
+
+        npm publish
+
     depends_on:
       gitea:
         condition: service_healthy
