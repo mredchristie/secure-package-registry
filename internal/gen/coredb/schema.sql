@@ -130,3 +130,14 @@ CREATE TABLE organization_packages (
     package_id INTEGER NOT NULL REFERENCES packages(id),
     UNIQUE(organization_id, package_id)
 );
+
+-- v4
+
+CREATE TABLE user_tokens (
+    id SERIAL PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+        token_hash TEXT NOT NULL UNIQUE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        expires_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+

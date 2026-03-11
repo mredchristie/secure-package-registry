@@ -268,6 +268,14 @@ type User struct {
 	UpdatedAt     pgtype.Timestamptz
 }
 
+type UserToken struct {
+	ID        int32
+	UserID    string
+	TokenHash string
+	CreatedAt pgtype.Timestamptz
+	ExpiresAt pgtype.Timestamptz
+}
+
 type Verification struct {
 	ID         string
 	Identifier string
