@@ -3,6 +3,7 @@ package external
 
 import (
 	"net/http"
+	"net/url"
 	"strconv"
 
 	"git.duti.dev/secure-package-registry/pkg/pkgdb"
@@ -75,7 +76,7 @@ func (h *PackageHandler) Search(w http.ResponseWriter, r *http.Request) {
 // GetVersion handles requests for a specific package version.
 func (h *PackageHandler) GetVersion(w http.ResponseWriter, r *http.Request) {
 	ecosystem := pkgdb.Ecosystem(chi.URLParam(r, "ecosystem"))
-	identifier := chi.URLParam(r, "identifier")
+	identifier, _ := url.PathUnescape(chi.URLParam(r, "identifier"))
 	version := chi.URLParam(r, "version")
 
 	pv, err := h.db.GetPackageVersion(r.Context(), ecosystem, identifier, version)

@@ -7,9 +7,9 @@ import (
 	"fmt"
 
 	"git.duti.dev/secure-package-registry/internal/messages"
-	"git.duti.dev/secure-package-registry/pkg/config"
 	"git.duti.dev/secure-package-registry/pkg/logger"
 	"git.duti.dev/secure-package-registry/pkg/npm"
+	"git.duti.dev/secure-package-registry/pkg/services"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill-amqp/v3/pkg/amqp"
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -26,23 +26,33 @@ type watcher struct {
 	poller          *npm.Poller
 }
 
-func NewWatcher() (*watcher, error) {
-	config := config.NewCoreConfig(config.WithEnv())
+// Start creates a new package watcher and runs it. Blocks until ctx is cancelled.
+func Start(ctx context.Context, deps *services.Deps) error {
+	w, err := NewWatcher(deps)
+	if err != nil {
+		return err
+	}
+	return w.Start(ctx)
+}
+
+// NewWatcher creates a new package watcher using shared dependencies.
+// It creates its own AMQP subscriber/publisher from deps.Config.RabbitMQURL.
+func NewWatcher(deps *services.Deps) (*watcher, error) {
 	subscriber, err := amqp.NewSubscriber(
-		amqp.NewDurableQueueConfig(config.RabbitMQURL),
+		amqp.NewDurableQueueConfig(deps.Config.RabbitMQURL),
 		watermill.NewStdLogger(false, false),
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("creating AMQP subscriber: %w", err)
 	}
 	publisher, err := amqp.NewPublisher(
-		amqp.NewDurableQueueConfig(config.RabbitMQURL),
+		amqp.NewDurableQueueConfig(deps.Config.RabbitMQURL),
 		watermill.NewStdLogger(false, false),
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("creating AMQP publisher: %w", err)
 	}
-	npmClient := npm.NewClient(config.NPM)
+	npmClient := npm.NewClient(deps.Config.NPM)
 	return &watcher{
 		watchedPackages: make(map[string]map[string]string),
 		subscriber:      subscriber,

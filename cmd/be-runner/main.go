@@ -6,7 +6,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	coresvc "git.duti.dev/secure-package-registry/pkg/services/core-svc"
+	berunner "git.duti.dev/secure-package-registry/pkg/services/be-runner"
 
 	"git.duti.dev/secure-package-registry/pkg/config"
 	"git.duti.dev/secure-package-registry/pkg/logger"
@@ -14,7 +14,7 @@ import (
 )
 
 func main() {
-	log := logger.WithComponent("core-svc")
+	log := logger.WithComponent("be-runner")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -35,7 +35,7 @@ func main() {
 	}
 	defer deps.Close()
 
-	if err := coresvc.Start(ctx, deps); err != nil {
-		log.Fatal().Err(err).Msg("core-svc exited with error")
+	if err := berunner.Start(ctx, deps); err != nil {
+		log.Fatal().Err(err).Msg("be-runner exited with error")
 	}
 }

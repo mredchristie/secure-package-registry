@@ -9,9 +9,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"git.duti.dev/secure-package-registry/cmd/core-svc/handlers/private"
 	"git.duti.dev/secure-package-registry/internal/gen/coredb"
 	"git.duti.dev/secure-package-registry/internal/messages"
+	"git.duti.dev/secure-package-registry/pkg/services/core-svc/handlers/private"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -61,6 +61,54 @@ func (m *mockQuerier) SearchPackages(context.Context, coredb.SearchPackagesParam
 }
 
 func (m *mockQuerier) UpdatePackageLatestVersion(context.Context, coredb.UpdatePackageLatestVersionParams) error {
+	panic("not used")
+}
+
+func (m *mockQuerier) GetPackageByEcosystemAndIdentifier(context.Context, coredb.GetPackageByEcosystemAndIdentifierParams) (coredb.GetPackageByEcosystemAndIdentifierRow, error) {
+	panic("not used")
+}
+
+func (m *mockQuerier) HasActiveCollectionTask(context.Context, coredb.HasActiveCollectionTaskParams) (bool, error) {
+	panic("not used")
+}
+
+func (m *mockQuerier) InsertCollectionTask(context.Context, coredb.InsertCollectionTaskParams) (coredb.InsertCollectionTaskRow, error) {
+	panic("not used")
+}
+
+func (m *mockQuerier) ResetCollectionTask(context.Context, int32) error {
+	panic("not used")
+}
+
+func (m *mockQuerier) UpdateCollectionTaskFailed(context.Context, coredb.UpdateCollectionTaskFailedParams) error {
+	panic("not used")
+}
+
+func (m *mockQuerier) UpdateCollectionTaskHeartbeat(context.Context, int32) error {
+	panic("not used")
+}
+
+func (m *mockQuerier) UpdateCollectionTaskRunning(context.Context, coredb.UpdateCollectionTaskRunningParams) error {
+	panic("not used")
+}
+
+func (m *mockQuerier) UpdateCollectionTaskStatus(context.Context, coredb.UpdateCollectionTaskStatusParams) error {
+	panic("not used")
+}
+
+func (m *mockQuerier) UpdateCollectionTaskSucceeded(context.Context, coredb.UpdateCollectionTaskSucceededParams) error {
+	panic("not used")
+}
+
+func (m *mockQuerier) GetCollectionTask(context.Context, int32) (coredb.CollectionTask, error) {
+	panic("not used")
+}
+
+func (m *mockQuerier) ListCollectionTasks(context.Context, coredb.ListCollectionTasksParams) ([]coredb.ListCollectionTasksRow, error) {
+	panic("not used")
+}
+
+func (m *mockQuerier) GetSucceededCollectionTask(context.Context, coredb.GetSucceededCollectionTaskParams) (coredb.GetSucceededCollectionTaskRow, error) {
 	panic("not used")
 }
 

@@ -1,14 +1,19 @@
-# NPM Registry Poller
+# Package Watcher
 
-Real-time NPM package version monitoring using the CouchDB changes feed.
+Watches requested NPM packages and publishes updates when a newer version appears in the NPM changes feed.
 
 ## Overview
 
-This service monitors the NPM registry for new package versions using `replicate.npmjs.com`, a CouchDB-compatible
-replication endpoint.
+`cmd/poller` is a thin entrypoint around `pkg/services/package-watcher`. The service:
 
-**Important**: The NPM replicate endpoint does NOT support continuous feeds or include_docs. We use batch polling with
-smart catch-up logic.
+1. Subscribes to `spr.package.requested`
+2. Starts an NPM changes-feed poller from the current registry sequence
+3. Keeps an in-memory watch list of requested packages and their last published version
+4. Fetches the latest NPM version for watched packages
+5. Publishes `spr.package.updated` when a new version is detected
+
+The current implementation is NPM-only and does not persist watched packages or the last processed changes-feed sequence
+across restarts.
 
 ## Architecture
 
@@ -20,30 +25,25 @@ flowchart TB
     end
 
     subgraph Internal["Poller Service"]
-        Poller["NPM Poller"]
-        Registry[(In-Memory Registry)]
+        Watcher["Package Watcher"]
+        WatchList[(In-Memory Watch List)]
     end
 
     subgraph Infrastructure["Infrastructure"]
-        PostgreSQL[(PostgreSQL)]
-        Valkey[(Valkey)]
         RabbitMQ[RabbitMQ]
         CoreSvc[core-svc]
     end
 
-    NPM_Replicate -->|"Batch Poll<br/>changes only"| Poller
-    Poller -->|"HTTP GET<br/>full package metadata"| NPM_Registry
-    NPM_Registry -->|"Package Info"| Poller
+    CoreSvc -->|"Publish<br/>spr.package.requested"| RabbitMQ
+    RabbitMQ -->|"Consume"| Watcher
 
-    PostgreSQL -->|"Load Packages"| Registry
-    Registry -->|"Check Package<br/>Exists?"| Poller
+    Watcher -->|"Track package"| WatchList
+    Watcher -->|"Poll changes"| NPM_Replicate
+    NPM_Replicate -->|"Package names + sequence"| Watcher
+    Watcher -->|"Fetch latest version"| NPM_Registry
+    NPM_Registry -->|"Package metadata"| Watcher
 
-    Poller -->|"Save Sequence ID"| Valkey
-    Valkey -->|"Load Sequence ID"| Poller
-
-    Poller -->|"Publish<br/>version.new"| RabbitMQ
-    RabbitMQ -->|"Consume<br/>package.created"| CoreSvc
-    CoreSvc -->|"New Package<br/>Notification"| Poller
+    Watcher -->|"Publish<br/>spr.package.updated"| RabbitMQ
 
     style External fill:#e1f5fe
     style Internal fill:#e8f5e9
@@ -52,61 +52,76 @@ flowchart TB
 
 ## Configuration
 
-| Environment Variable | Default           | Description          |
-| -------------------- | ----------------- | -------------------- |
-| `DB_HOST`            | `core_db`         | Database host        |
-| `DB_PORT`            | `5432`            | Database port        |
-| `DB_USER`            | `core`            | Database user        |
-| `DB_PASSWORD`        | `PleaseChangeMe`  | Database password    |
-| `DB_NAME`            | `secure_registry` | Database name        |
-| `VALKEY_HOST`        | `valkey_db`       | Valkey host          |
-| `VALKEY_PORT`        | `6379`            | Valkey port          |
-| `RABBITMQ_HOST`      | `rabbitmq`        | RabbitMQ host        |
-| `RABBITMQ_PORT`      | `5672`            | RabbitMQ port        |
-| `RABBITMQ_USER`      | `admin`           | RabbitMQ user        |
-| `RABBITMQ_PASSWORD`  | `admin`           | RabbitMQ password    |
-| `HTTP_TIMEOUT`       | `30s`             | HTTP request timeout |
+The watcher uses shared core config from `pkg/config`.
 
-## Polling Strategy
+| Environment Variable | Default                                                          | Description                                                  |
+| -------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------ |
+| `RABBITMQ_URL`       | `amqp://admin:admin@rabbitmq:5672/`                              | Watermill AMQP connection URL for subscribing and publishing |
+| `DATABASE_URL`       | `postgres://postgres:postgres@core_db:5432/core?sslmode=disable` | Shared core config value; currently unused by the watcher    |
+| `VALKEY_URL`         | `valkey:6379`                                                    | Shared core config value; currently unused by the watcher    |
+| `NPM_REGISTRY_URL`   | `https://registry.npmjs.org`                                     | Base URL for package metadata lookups                        |
+| `NPM_REPLICATE_URL`  | `https://replicate.npmjs.com`                                    | CouchDB-compatible changes feed endpoint                     |
+| `NPM_HTTP_TIMEOUT`   | `10s`                                                            | Timeout for NPM HTTP requests                                |
 
-The poller uses an adaptive polling strategy:
+## Runtime Behavior
 
-1. **Poll Interval**: 30 seconds when idle
-2. **Batch Size**: 100 changes per request
-3. **Immediate Catch-up**: If we receive a full batch (100 changes), poll again immediately
-4. **This ensures we catch up quickly during high-activity periods while staying efficient during quiet periods**
+### Startup
 
-### Example Flow
+- Creates RabbitMQ subscriber and publisher clients
+- Builds an NPM client and poller
+- Resolves the initial changes-feed sequence from `GET /` on the replicate endpoint
+- Starts two concurrent loops:
+  - a RabbitMQ consumer for package requests
+  - a replicate-feed polling loop
 
-**Scenario: 500 changes occur while poller was offline**
+Because the poller starts from the current sequence when no sequence is provided, updates that happened before the
+service started are not replayed.
 
-1. Poll → Get changes 1-100, hasMore=true → **poll immediately**
-2. Poll → Get changes 101-200, hasMore=true → **poll immediately**
-3. Poll → Get changes 201-300, hasMore=true → **poll immediately**
-4. Poll → Get changes 301-400, hasMore=true → **poll immediately**
-5. Poll → Get changes 401-500, hasMore=false → **wait 30s**
+### Package request flow
 
-**Total time to catch up**: ~5 seconds (sequential HTTP requests) vs ~2.5 minutes (fixed interval)
+When `core-svc` publishes `spr.package.requested`, the payload is a gob-encoded `messages.PackageRequest`:
 
-## Data Flow
-
-1. **Startup**: Load packages from database into in-memory registry
-2. **Poll**: Fetch changes from `replicate.npmjs.com/_changes?since=<last_seq>&limit=100`
-3. **Filter**: Skip deleted packages and design documents
-4. **Check**: For each change, check if package is in our registry
-5. **Fetch**: Get full package metadata from `registry.npmjs.org/<package>`
-6. **Compare**: Check if version differs from cached version
-7. **Publish**: Send `version.new` event to RabbitMQ
-8. **Persist**: Save sequence ID to Valkey for crash recovery
-9. **Repeat**: If we got 100 changes, poll immediately; otherwise wait 30s
-
-## Changes Feed Format
-
-```plain
-GET https://replicate.npmjs.com/_changes?since=97816045&limit=100
+```go
+type PackageRequest struct {
+    Ecosystem  string
+    Identifier string
+}
 ```
 
-Response (JSON):
+The watcher:
+
+1. Decodes the message
+2. Adds the package to the in-memory watch list with an empty known version
+3. Immediately fetches the latest version from the NPM registry
+4. Publishes `spr.package.updated` if a version is found
+5. Acknowledges the message only after the initial fetch succeeds
+
+Non-NPM requests are rejected as unsupported.
+
+### Update detection flow
+
+The NPM poller fetches batches of up to 100 changes from `_changes` every 30 seconds.
+
+For each change:
+
+- design documents and deleted packages are skipped
+- only packages already present in the watch list are considered
+- the watcher fetches the latest version from `registry.npmjs.org/<package>`
+- if the version differs from the last published version, it publishes an update and refreshes the cached version
+
+If a poll returns a full batch, the next poll is triggered immediately so the watcher can catch up without waiting for
+the 30 second interval.
+
+## Changes Feed
+
+```plain
+GET https://replicate.npmjs.com/_changes?since=<sequence>&limit=100
+```
+
+The code starts from the current `update_seq` returned by the replicate root endpoint unless a sequence is explicitly
+supplied to `pkg/npm.Poller.Start`.
+
+Response shape used by the poller:
 
 ```json
 {
@@ -118,51 +133,32 @@ Response (JSON):
 }
 ```
 
-**Note**: Changes don't include package metadata. We fetch that separately from registry.npmjs.org.
+## RabbitMQ Topics and Payloads
 
-## RabbitMQ Events
+### Consumed: `spr.package.requested`
 
-### Consumed
-
-**Queue**: `package.created`
-
-```json
-{
-  "id": 123,
-  "identifier": "lodash",
-  "ecosystem": "npm"
+```go
+type PackageRequest struct {
+    Ecosystem  string
+    Identifier string
 }
 ```
 
-### Published
+### Published: `spr.package.updated`
 
-**Exchange**: `package.events`  
-**Routing Key**: `version.new`
-
-```json
-{
-  "event_type": "new_version_detected",
-  "package_id": 123,
-  "identifier": "lodash",
-  "ecosystem": "npm",
-  "version": "4.17.21",
-  "detected_at": "2026-02-19T00:00:00Z"
+```go
+type PackageUpdated struct {
+    Ecosystem  string
+    Identifier string
+    Version    string
 }
 ```
 
-## Valkey Persistence
+Both messages are gob-encoded before being sent through Watermill AMQP.
 
-- **Key**: `poll:last_sequence:npm`
-- **Value**: Last processed sequence ID (e.g., "97816047")
+## Current Limitations
 
-Enables crash recovery without re-processing from the beginning.
-
-## Why Valkey?
-
-Without persistent state, a crash would mean:
-
-1. Losing our position in the changes feed
-2. Missing updates that occurred during downtime
-3. Needing to re-process millions of changes
-
-Valkey provides lightweight persistence for the sequence ID.
+- Watched packages are stored in memory only
+- The NPM changes-feed sequence is not persisted yet
+- Only the `npm` ecosystem is supported
+- Version checks happen by fetching full package metadata on demand

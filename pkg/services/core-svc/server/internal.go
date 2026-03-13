@@ -3,8 +3,8 @@ package server
 import (
 	"net/http"
 
-	"git.duti.dev/secure-package-registry/cmd/core-svc/handlers/private"
 	"git.duti.dev/secure-package-registry/internal/gen/coredb"
+	"git.duti.dev/secure-package-registry/pkg/services/core-svc/handlers/private"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
