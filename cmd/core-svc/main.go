@@ -114,7 +114,7 @@ func main() {
 }
 
 func runMigrations(_ context.Context, databaseURL string) (err error) {
-	log.Info().Msg("Running database migrations")
+	log.Info().Str("database_url", databaseURL).Msg("Running database migrations")
 
 	db, err := sql.Open("pgx", databaseURL)
 	if err != nil {
@@ -138,8 +138,10 @@ func runMigrations(_ context.Context, databaseURL string) (err error) {
 		return fmt.Errorf("failed to create migration driver: %w", err)
 	}
 
+	sourcePath := "file:///app/infra/migrations"
+
 	m, err := migrate.NewWithDatabaseInstance(
-		"file://infra/migrations",
+		sourcePath,
 		"pgx",
 		driver,
 	)

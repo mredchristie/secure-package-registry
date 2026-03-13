@@ -1,5 +1,7 @@
 # Secure Package Registry Dashboard
 
+## Goal
+
 The goal of this component is 3-fold:
 
 1. Allow users to easily search for and view information about packages in different ecosystems and their status in our

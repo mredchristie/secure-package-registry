@@ -12,7 +12,7 @@ import (
 )
 
 const getPackageVersion = `-- name: GetPackageVersion :one
-SELECT 
+SELECT
     p.identifier,
     p.ecosystem::text,
     pv.version,
@@ -65,7 +65,7 @@ func (q *Queries) GetPackageVersion(ctx context.Context, arg GetPackageVersionPa
 }
 
 const getPackageVersionTags = `-- name: GetPackageVersionTags :many
-SELECT 
+SELECT
     ptt.label,
     ptt.value_type,
     pvt.value
@@ -260,7 +260,7 @@ func (q *Queries) ListPackagesByEcosystem(ctx context.Context, ecosystem Ecosyst
 }
 
 const searchPackages = `-- name: SearchPackages :many
-SELECT 
+SELECT
     p.identifier,
     p.ecosystem::text,
     p.latest_version

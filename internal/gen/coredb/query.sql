@@ -1,5 +1,5 @@
 -- name: GetPackageVersion :one
-SELECT 
+SELECT
     p.identifier,
     p.ecosystem::text,
     pv.version,
@@ -16,7 +16,7 @@ WHERE p.ecosystem = $1
   AND pv.version = $3;
 
 -- name: GetPackageVersionTags :many
-SELECT 
+SELECT
     ptt.label,
     ptt.value_type,
     pvt.value
@@ -29,7 +29,7 @@ WHERE p.ecosystem = $1
   AND pv.version = $3;
 
 -- name: SearchPackages :many
-SELECT 
+SELECT
     p.identifier,
     p.ecosystem::text,
     p.latest_version

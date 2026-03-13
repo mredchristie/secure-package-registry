@@ -98,6 +98,56 @@ func (ns NullPkgVtype) Value() (driver.Value, error) {
 	return string(ns.PkgVtype), nil
 }
 
+type Account struct {
+	ID                    string
+	AccountId             string
+	ProviderId            string
+	UserId                string
+	AccessToken           pgtype.Text
+	RefreshToken          pgtype.Text
+	IdToken               pgtype.Text
+	AccessTokenExpiresAt  pgtype.Timestamptz
+	RefreshTokenExpiresAt pgtype.Timestamptz
+	Scope                 pgtype.Text
+	Password              pgtype.Text
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+}
+
+type Invitation struct {
+	ID             string
+	OrganizationId string
+	Email          string
+	Role           pgtype.Text
+	Status         string
+	ExpiresAt      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	InviterId      string
+}
+
+type Member struct {
+	ID             string
+	OrganizationId string
+	UserId         string
+	Role           string
+	CreatedAt      pgtype.Timestamptz
+}
+
+type Organization struct {
+	ID        string
+	Name      string
+	Slug      string
+	Logo      pgtype.Text
+	CreatedAt pgtype.Timestamptz
+	Metadata  pgtype.Text
+}
+
+type OrganizationPackage struct {
+	ID             int32
+	OrganizationID string
+	PackageID      int32
+}
+
 type Package struct {
 	ID                   int32
 	Identifier           string
@@ -134,4 +184,34 @@ type PackageVersionTag struct {
 	Value          []byte
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
+}
+
+type Session struct {
+	ID                   string
+	ExpiresAt            pgtype.Timestamptz
+	Token                string
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	IpAddress            pgtype.Text
+	UserAgent            pgtype.Text
+	UserId               string
+	ActiveOrganizationId pgtype.Text
+}
+
+type User struct {
+	ID            string
+	Name          string
+	EmailVerified bool
+	Image         pgtype.Text
+	CreatedAt     pgtype.Timestamptz
+	UpdatedAt     pgtype.Timestamptz
+}
+
+type Verification struct {
+	ID         string
+	Identifier string
+	Value      string
+	ExpiresAt  pgtype.Timestamptz
+	CreatedAt  pgtype.Timestamptz
+	UpdatedAt  pgtype.Timestamptz
 }

@@ -4,6 +4,10 @@ stages:
 image: golang:1.25.6
 
 check:
+  variables:
+    PUBLIC_HOME_BASE_URL: "localhost:5173"
+    PUBLIC_DASHBOARD_BASE_URL: "localhost:5174"
+
   stage: check
   variables:
     PUBLIC_HOME_BASE_URL: "localhost:5173"
