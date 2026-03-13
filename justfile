@@ -36,6 +36,9 @@ check:
 test:
   go test ./...
 
+integration:
+  go test -tags integration -v -count=1 -timeout 15m ./...
+
 generate:
   #!/usr/bin/env bash
   go generate ./...
