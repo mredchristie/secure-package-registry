@@ -79,11 +79,19 @@ type NPMPackage struct {
 }
 
 // NPMVersion represents a specific version of a package.
-// We only parse the fields we need; unknown fields are ignored.
 type NPMVersion struct {
-	// Version field is kept for validation but not actively used.
-	// The version is determined from the Versions map key.
-	Version string `json:"version"`
+	Version              string            `json:"version"`
+	Dependencies         map[string]string `json:"dependencies,omitempty"`
+	OptionalDependencies map[string]string `json:"optionalDependencies,omitempty"`
+	PeerDependencies     map[string]string `json:"peerDependencies,omitempty"`
+	Dist                 NPMDist           `json:"dist"`
+}
+
+// NPMDist contains distribution metadata for a version.
+type NPMDist struct {
+	Tarball   string `json:"tarball"`
+	Shasum    string `json:"shasum,omitempty"`
+	Integrity string `json:"integrity,omitempty"`
 }
 
 // NPMMaintainer represents a package maintainer
