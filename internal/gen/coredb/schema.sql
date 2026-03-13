@@ -19,7 +19,7 @@ CREATE TABLE package_versions (
     id SERIAL PRIMARY KEY,
     package_id INTEGER NOT NULL REFERENCES packages(id) ON DELETE CASCADE,
     version TEXT NOT NULL,
-    source_url TEXT NOT NULL,
+    source_url TEXT,
     source_tag TEXT,
     source_commit_hash TEXT,
     maintainer_notes TEXT,
@@ -49,7 +49,32 @@ CREATE TABLE package_version_tags (
     PRIMARY KEY (package_version, tag_type)
 );
 
--- v2
+-- Behavioral analysis collection tasks
+
+CREATE TYPE COLLECTION_TASK_STATUS AS ENUM ('pending', 'running', 'succeeded', 'failed', 'cancelled');
+
+CREATE TABLE collection_tasks (
+    id SERIAL PRIMARY KEY,
+    package_version_id INTEGER NOT NULL REFERENCES package_versions(id) ON DELETE CASCADE,
+    source TEXT NOT NULL DEFAULT 'npm',
+    status COLLECTION_TASK_STATUS NOT NULL DEFAULT 'pending',
+    workflow_run_id BIGINT,
+    artifact_bucket TEXT,
+    artifact_key TEXT,
+    started_at TIMESTAMP WITH TIME ZONE,
+    heartbeat_at TIMESTAMP WITH TIME ZONE,
+    completed_at TIMESTAMP WITH TIME ZONE,
+    failure_reason TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    -- Only one active (pending/running) task per package version + source at a time.
+    UNIQUE(package_version_id, source) 
+);
+
+CREATE INDEX idx_collection_tasks_status ON collection_tasks (status);
+CREATE INDEX idx_collection_tasks_heartbeat ON collection_tasks (status, heartbeat_at) WHERE status = 'running';
+
+-- User table
 
 CREATE TABLE IF NOT EXISTS "user" (
     "id" text NOT NULL PRIMARY KEY
@@ -97,7 +122,7 @@ create index "invitation_organizationId_idx" on "invitation" ("organizationId");
 
 create index "invitation_email_idx" on "invitation" ("email");
 
--- v3
+-- Us: Package tracking for organizations
 
 CREATE TABLE organization_packages (
     id SERIAL PRIMARY KEY,

@@ -89,7 +89,7 @@ func (c *Client) GetPackageVersion(ctx context.Context, ecosystem Ecosystem, ide
 		Version:    versionRow.Version,
 		Latest:     versionRow.Latest,
 		Source: Source{
-			URL:    versionRow.SourceUrl,
+			URL:    pgtypeTextToString(versionRow.SourceUrl),
 			Tag:    pgtypeTextToString(versionRow.SourceTag),
 			Commit: pgtypeTextToString(versionRow.SourceCommitHash),
 		},

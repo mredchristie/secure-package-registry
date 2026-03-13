@@ -9,16 +9,39 @@ import (
 )
 
 type Querier interface {
+	GetCollectionTask(ctx context.Context, id int32) (CollectionTask, error)
+	GetPackageByEcosystemAndIdentifier(ctx context.Context, arg GetPackageByEcosystemAndIdentifierParams) (GetPackageByEcosystemAndIdentifierRow, error)
 	GetPackageVersion(ctx context.Context, arg GetPackageVersionParams) (GetPackageVersionRow, error)
 	GetPackageVersionTags(ctx context.Context, arg GetPackageVersionTagsParams) ([]GetPackageVersionTagsRow, error)
+	// Finds the succeeded collection task for a given ecosystem, package identifier, and version.
+	// Returns the artifact location needed for serving deduped behavior data.
+	GetSucceededCollectionTask(ctx context.Context, arg GetSucceededCollectionTaskParams) (GetSucceededCollectionTaskRow, error)
+	// Checks whether an active (pending or running) collection task exists
+	// for the given package version and source. Returns true/false.
+	HasActiveCollectionTask(ctx context.Context, arg HasActiveCollectionTaskParams) (bool, error)
+	// Collection task queries
+	// Inserts a new collection task for a package version + source.
+	// Returns the new row. If a task already exists for this combination,
+	// does nothing and returns nothing (caller checks sql.ErrNoRows).
+	InsertCollectionTask(ctx context.Context, arg InsertCollectionTaskParams) (InsertCollectionTaskRow, error)
 	InsertPackage(ctx context.Context, arg InsertPackageParams) (int32, error)
 	InsertPackageTag(ctx context.Context, arg InsertPackageTagParams) error
 	InsertPackageVersion(ctx context.Context, arg InsertPackageVersionParams) (int32, error)
 	InsertTagType(ctx context.Context, arg InsertTagTypeParams) (int32, error)
+	// Lists collection tasks with package context, optionally filtered by ecosystem.
+	// Ordered by most recently created first, paginated.
+	ListCollectionTasks(ctx context.Context, arg ListCollectionTasksParams) ([]ListCollectionTasksRow, error)
 	ListPackageVersions(ctx context.Context, packageID int32) ([]string, error)
 	// Poller queries
 	ListPackagesByEcosystem(ctx context.Context, ecosystem Ecosystem) ([]ListPackagesByEcosystemRow, error)
+	// Resets a failed/cancelled task back to pending for retry.
+	ResetCollectionTask(ctx context.Context, id int32) error
 	SearchPackages(ctx context.Context, arg SearchPackagesParams) ([]SearchPackagesRow, error)
+	UpdateCollectionTaskFailed(ctx context.Context, arg UpdateCollectionTaskFailedParams) error
+	UpdateCollectionTaskHeartbeat(ctx context.Context, id int32) error
+	UpdateCollectionTaskRunning(ctx context.Context, arg UpdateCollectionTaskRunningParams) error
+	UpdateCollectionTaskStatus(ctx context.Context, arg UpdateCollectionTaskStatusParams) error
+	UpdateCollectionTaskSucceeded(ctx context.Context, arg UpdateCollectionTaskSucceededParams) error
 	UpdatePackageLatestVersion(ctx context.Context, arg UpdatePackageLatestVersionParams) error
 }
 

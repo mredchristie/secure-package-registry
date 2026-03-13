@@ -11,6 +11,51 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type CollectionTaskStatus string
+
+const (
+	CollectionTaskStatusPending   CollectionTaskStatus = "pending"
+	CollectionTaskStatusRunning   CollectionTaskStatus = "running"
+	CollectionTaskStatusSucceeded CollectionTaskStatus = "succeeded"
+	CollectionTaskStatusFailed    CollectionTaskStatus = "failed"
+	CollectionTaskStatusCancelled CollectionTaskStatus = "cancelled"
+)
+
+func (e *CollectionTaskStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = CollectionTaskStatus(s)
+	case string:
+		*e = CollectionTaskStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for CollectionTaskStatus: %T", src)
+	}
+	return nil
+}
+
+type NullCollectionTaskStatus struct {
+	CollectionTaskStatus CollectionTaskStatus
+	Valid                bool // Valid is true if CollectionTaskStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullCollectionTaskStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.CollectionTaskStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.CollectionTaskStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullCollectionTaskStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.CollectionTaskStatus), nil
+}
+
 type Ecosystem string
 
 const (
@@ -114,6 +159,22 @@ type Account struct {
 	UpdatedAt             pgtype.Timestamptz
 }
 
+type CollectionTask struct {
+	ID               int32
+	PackageVersionID int32
+	Source           string
+	Status           CollectionTaskStatus
+	WorkflowRunID    pgtype.Int8
+	ArtifactBucket   pgtype.Text
+	ArtifactKey      pgtype.Text
+	StartedAt        pgtype.Timestamptz
+	HeartbeatAt      pgtype.Timestamptz
+	CompletedAt      pgtype.Timestamptz
+	FailureReason    pgtype.Text
+	CreatedAt        pgtype.Timestamptz
+	UpdatedAt        pgtype.Timestamptz
+}
+
 type Invitation struct {
 	ID             string
 	OrganizationId string
@@ -170,7 +231,7 @@ type PackageVersion struct {
 	ID               int32
 	PackageID        int32
 	Version          string
-	SourceUrl        string
+	SourceUrl        pgtype.Text
 	SourceTag        pgtype.Text
 	SourceCommitHash pgtype.Text
 	MaintainerNotes  pgtype.Text

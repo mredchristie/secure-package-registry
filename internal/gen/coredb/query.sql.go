@@ -11,6 +11,67 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getCollectionTask = `-- name: GetCollectionTask :one
+SELECT id, package_version_id, source, status,
+       workflow_run_id, artifact_bucket, artifact_key,
+       started_at, heartbeat_at, completed_at, failure_reason,
+       created_at, updated_at
+FROM collection_tasks
+WHERE id = $1
+`
+
+func (q *Queries) GetCollectionTask(ctx context.Context, id int32) (CollectionTask, error) {
+	row := q.db.QueryRow(ctx, getCollectionTask, id)
+	var i CollectionTask
+	err := row.Scan(
+		&i.ID,
+		&i.PackageVersionID,
+		&i.Source,
+		&i.Status,
+		&i.WorkflowRunID,
+		&i.ArtifactBucket,
+		&i.ArtifactKey,
+		&i.StartedAt,
+		&i.HeartbeatAt,
+		&i.CompletedAt,
+		&i.FailureReason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getPackageByEcosystemAndIdentifier = `-- name: GetPackageByEcosystemAndIdentifier :one
+SELECT id, identifier, ecosystem, latest_version
+FROM packages
+WHERE ecosystem = $1
+  AND identifier = $2
+`
+
+type GetPackageByEcosystemAndIdentifierParams struct {
+	Ecosystem  Ecosystem
+	Identifier string
+}
+
+type GetPackageByEcosystemAndIdentifierRow struct {
+	ID            int32
+	Identifier    string
+	Ecosystem     Ecosystem
+	LatestVersion pgtype.Text
+}
+
+func (q *Queries) GetPackageByEcosystemAndIdentifier(ctx context.Context, arg GetPackageByEcosystemAndIdentifierParams) (GetPackageByEcosystemAndIdentifierRow, error) {
+	row := q.db.QueryRow(ctx, getPackageByEcosystemAndIdentifier, arg.Ecosystem, arg.Identifier)
+	var i GetPackageByEcosystemAndIdentifierRow
+	err := row.Scan(
+		&i.ID,
+		&i.Identifier,
+		&i.Ecosystem,
+		&i.LatestVersion,
+	)
+	return i, err
+}
+
 const getPackageVersion = `-- name: GetPackageVersion :one
 SELECT
     p.identifier,
@@ -40,7 +101,7 @@ type GetPackageVersionRow struct {
 	PEcosystem       string
 	Version          string
 	Latest           bool
-	SourceUrl        string
+	SourceUrl        pgtype.Text
 	SourceTag        pgtype.Text
 	SourceCommitHash pgtype.Text
 	TrustLevel       pgtype.Int4
@@ -110,6 +171,104 @@ func (q *Queries) GetPackageVersionTags(ctx context.Context, arg GetPackageVersi
 	return items, nil
 }
 
+const getSucceededCollectionTask = `-- name: GetSucceededCollectionTask :one
+SELECT
+    ct.id,
+    ct.artifact_bucket,
+    ct.artifact_key
+FROM collection_tasks ct
+JOIN package_versions pv ON pv.id = ct.package_version_id
+JOIN packages p ON p.id = pv.package_id
+WHERE p.ecosystem = $1
+  AND p.identifier = $2
+  AND pv.version = $3
+  AND ct.status = 'succeeded'
+  AND ct.artifact_key IS NOT NULL
+LIMIT 1
+`
+
+type GetSucceededCollectionTaskParams struct {
+	Ecosystem  Ecosystem
+	Identifier string
+	Version    string
+}
+
+type GetSucceededCollectionTaskRow struct {
+	ID             int32
+	ArtifactBucket pgtype.Text
+	ArtifactKey    pgtype.Text
+}
+
+// Finds the succeeded collection task for a given ecosystem, package identifier, and version.
+// Returns the artifact location needed for serving deduped behavior data.
+func (q *Queries) GetSucceededCollectionTask(ctx context.Context, arg GetSucceededCollectionTaskParams) (GetSucceededCollectionTaskRow, error) {
+	row := q.db.QueryRow(ctx, getSucceededCollectionTask, arg.Ecosystem, arg.Identifier, arg.Version)
+	var i GetSucceededCollectionTaskRow
+	err := row.Scan(&i.ID, &i.ArtifactBucket, &i.ArtifactKey)
+	return i, err
+}
+
+const hasActiveCollectionTask = `-- name: HasActiveCollectionTask :one
+SELECT EXISTS(
+    SELECT 1 FROM collection_tasks
+    WHERE package_version_id = $1
+      AND source = $2
+      AND status IN ('pending', 'running')
+) AS active
+`
+
+type HasActiveCollectionTaskParams struct {
+	PackageVersionID int32
+	Source           string
+}
+
+// Checks whether an active (pending or running) collection task exists
+// for the given package version and source. Returns true/false.
+func (q *Queries) HasActiveCollectionTask(ctx context.Context, arg HasActiveCollectionTaskParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasActiveCollectionTask, arg.PackageVersionID, arg.Source)
+	var active bool
+	err := row.Scan(&active)
+	return active, err
+}
+
+const insertCollectionTask = `-- name: InsertCollectionTask :one
+
+INSERT INTO collection_tasks (package_version_id, source, status)
+VALUES ($1, $2, 'pending')
+ON CONFLICT (package_version_id, source) DO NOTHING
+RETURNING id, package_version_id, source, status, created_at
+`
+
+type InsertCollectionTaskParams struct {
+	PackageVersionID int32
+	Source           string
+}
+
+type InsertCollectionTaskRow struct {
+	ID               int32
+	PackageVersionID int32
+	Source           string
+	Status           CollectionTaskStatus
+	CreatedAt        pgtype.Timestamptz
+}
+
+// Collection task queries
+// Inserts a new collection task for a package version + source.
+// Returns the new row. If a task already exists for this combination,
+// does nothing and returns nothing (caller checks sql.ErrNoRows).
+func (q *Queries) InsertCollectionTask(ctx context.Context, arg InsertCollectionTaskParams) (InsertCollectionTaskRow, error) {
+	row := q.db.QueryRow(ctx, insertCollectionTask, arg.PackageVersionID, arg.Source)
+	var i InsertCollectionTaskRow
+	err := row.Scan(
+		&i.ID,
+		&i.PackageVersionID,
+		&i.Source,
+		&i.Status,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const insertPackage = `-- name: InsertPackage :one
 INSERT INTO packages (identifier, ecosystem, latest_version)
 VALUES ($1, $2, $3)
@@ -154,14 +313,15 @@ const insertPackageVersion = `-- name: InsertPackageVersion :one
 INSERT INTO package_versions (package_id, version, source_url)
 VALUES ($1, $2, $3)
 ON CONFLICT (package_id, version) DO UPDATE SET
-    source_url = EXCLUDED.source_url
+    source_url = COALESCE(EXCLUDED.source_url, package_versions.source_url),
+    updated_at = CURRENT_TIMESTAMP
 RETURNING id
 `
 
 type InsertPackageVersionParams struct {
 	PackageID int32
 	Version   string
-	SourceUrl string
+	SourceUrl pgtype.Text
 }
 
 func (q *Queries) InsertPackageVersion(ctx context.Context, arg InsertPackageVersionParams) (int32, error) {
@@ -191,6 +351,84 @@ func (q *Queries) InsertTagType(ctx context.Context, arg InsertTagTypeParams) (i
 	var id int32
 	err := row.Scan(&id)
 	return id, err
+}
+
+const listCollectionTasks = `-- name: ListCollectionTasks :many
+SELECT
+    ct.id,
+    ct.source,
+    ct.status,
+    ct.artifact_bucket,
+    ct.artifact_key,
+    ct.failure_reason,
+    ct.started_at,
+    ct.completed_at,
+    ct.created_at,
+    p.identifier,
+    p.ecosystem::text,
+    pv.version
+FROM collection_tasks ct
+JOIN package_versions pv ON pv.id = ct.package_version_id
+JOIN packages p ON p.id = pv.package_id
+WHERE ($1::ECOSYSTEM IS NULL OR p.ecosystem = $1::ECOSYSTEM)
+ORDER BY ct.created_at DESC
+LIMIT $3 OFFSET ($2 - 1) * $3
+`
+
+type ListCollectionTasksParams struct {
+	Ecosystem NullEcosystem
+	Page      interface{}
+	PageSize  int32
+}
+
+type ListCollectionTasksRow struct {
+	ID             int32
+	Source         string
+	Status         CollectionTaskStatus
+	ArtifactBucket pgtype.Text
+	ArtifactKey    pgtype.Text
+	FailureReason  pgtype.Text
+	StartedAt      pgtype.Timestamptz
+	CompletedAt    pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	Identifier     string
+	PEcosystem     string
+	Version        string
+}
+
+// Lists collection tasks with package context, optionally filtered by ecosystem.
+// Ordered by most recently created first, paginated.
+func (q *Queries) ListCollectionTasks(ctx context.Context, arg ListCollectionTasksParams) ([]ListCollectionTasksRow, error) {
+	rows, err := q.db.Query(ctx, listCollectionTasks, arg.Ecosystem, arg.Page, arg.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCollectionTasksRow
+	for rows.Next() {
+		var i ListCollectionTasksRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Source,
+			&i.Status,
+			&i.ArtifactBucket,
+			&i.ArtifactKey,
+			&i.FailureReason,
+			&i.StartedAt,
+			&i.CompletedAt,
+			&i.CreatedAt,
+			&i.Identifier,
+			&i.PEcosystem,
+			&i.Version,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listPackageVersions = `-- name: ListPackageVersions :many
@@ -259,6 +497,27 @@ func (q *Queries) ListPackagesByEcosystem(ctx context.Context, ecosystem Ecosyst
 	return items, nil
 }
 
+const resetCollectionTask = `-- name: ResetCollectionTask :exec
+UPDATE collection_tasks
+SET status = 'pending',
+    workflow_run_id = NULL,
+    artifact_bucket = NULL,
+    artifact_key = NULL,
+    started_at = NULL,
+    heartbeat_at = NULL,
+    completed_at = NULL,
+    failure_reason = NULL,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $1
+  AND status IN ('failed', 'cancelled')
+`
+
+// Resets a failed/cancelled task back to pending for retry.
+func (q *Queries) ResetCollectionTask(ctx context.Context, id int32) error {
+	_, err := q.db.Exec(ctx, resetCollectionTask, id)
+	return err
+}
+
 const searchPackages = `-- name: SearchPackages :many
 SELECT
     p.identifier,
@@ -307,6 +566,94 @@ func (q *Queries) SearchPackages(ctx context.Context, arg SearchPackagesParams) 
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateCollectionTaskFailed = `-- name: UpdateCollectionTaskFailed :exec
+UPDATE collection_tasks
+SET status = 'failed',
+    failure_reason = $2,
+    completed_at = CURRENT_TIMESTAMP,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $1
+`
+
+type UpdateCollectionTaskFailedParams struct {
+	ID            int32
+	FailureReason pgtype.Text
+}
+
+func (q *Queries) UpdateCollectionTaskFailed(ctx context.Context, arg UpdateCollectionTaskFailedParams) error {
+	_, err := q.db.Exec(ctx, updateCollectionTaskFailed, arg.ID, arg.FailureReason)
+	return err
+}
+
+const updateCollectionTaskHeartbeat = `-- name: UpdateCollectionTaskHeartbeat :exec
+UPDATE collection_tasks
+SET heartbeat_at = CURRENT_TIMESTAMP,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $1
+`
+
+func (q *Queries) UpdateCollectionTaskHeartbeat(ctx context.Context, id int32) error {
+	_, err := q.db.Exec(ctx, updateCollectionTaskHeartbeat, id)
+	return err
+}
+
+const updateCollectionTaskRunning = `-- name: UpdateCollectionTaskRunning :exec
+UPDATE collection_tasks
+SET status = 'running',
+    workflow_run_id = $2,
+    started_at = CURRENT_TIMESTAMP,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $1
+`
+
+type UpdateCollectionTaskRunningParams struct {
+	ID            int32
+	WorkflowRunID pgtype.Int8
+}
+
+func (q *Queries) UpdateCollectionTaskRunning(ctx context.Context, arg UpdateCollectionTaskRunningParams) error {
+	_, err := q.db.Exec(ctx, updateCollectionTaskRunning, arg.ID, arg.WorkflowRunID)
+	return err
+}
+
+const updateCollectionTaskStatus = `-- name: UpdateCollectionTaskStatus :exec
+UPDATE collection_tasks
+SET status = $2,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $1
+`
+
+type UpdateCollectionTaskStatusParams struct {
+	ID     int32
+	Status CollectionTaskStatus
+}
+
+func (q *Queries) UpdateCollectionTaskStatus(ctx context.Context, arg UpdateCollectionTaskStatusParams) error {
+	_, err := q.db.Exec(ctx, updateCollectionTaskStatus, arg.ID, arg.Status)
+	return err
+}
+
+const updateCollectionTaskSucceeded = `-- name: UpdateCollectionTaskSucceeded :exec
+UPDATE collection_tasks
+SET status = 'succeeded',
+    artifact_bucket = $2,
+    artifact_key = $3,
+    completed_at = CURRENT_TIMESTAMP,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $1
+`
+
+type UpdateCollectionTaskSucceededParams struct {
+	ID             int32
+	ArtifactBucket pgtype.Text
+	ArtifactKey    pgtype.Text
+}
+
+func (q *Queries) UpdateCollectionTaskSucceeded(ctx context.Context, arg UpdateCollectionTaskSucceededParams) error {
+	_, err := q.db.Exec(ctx, updateCollectionTaskSucceeded, arg.ID, arg.ArtifactBucket, arg.ArtifactKey)
+	return err
 }
 
 const updatePackageLatestVersion = `-- name: UpdatePackageLatestVersion :exec
