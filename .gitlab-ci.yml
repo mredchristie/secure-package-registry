@@ -1,7 +1,17 @@
 stages:
+  - sync
   - check
 
 image: golang:1.25.6
+
+sync_runner:
+  stage: sync
+  only:
+    - main
+  script:
+    - git fetch --all
+    - SPLIT_COMMIT=$(git subtree split --prefix=spr-gh-runner)
+    - git push https://luddite-ltd:${GH_SYNC_TOKEN}@github.com/luddite-ltd/spr-gh-runner.git $SPLIT_COMMIT:refs/heads/main --force
 
 check:
   variables:
@@ -9,9 +19,6 @@ check:
     PUBLIC_DASHBOARD_BASE_URL: "localhost:5174"
 
   stage: check
-  variables:
-    PUBLIC_HOME_BASE_URL: "localhost:5173"
-    PUBLIC_DASHBOARD_BASE_URL: "localhost:5174"
 
   script:
     - apt update
