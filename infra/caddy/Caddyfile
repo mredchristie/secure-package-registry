@@ -4,7 +4,11 @@
 
 :8000 {
 	route /api/v1/svc/* {
-		reverse_proxy core-svc:8080
+		reverse_proxy spr:8080
+	}
+
+	route /api/v1/admin/* {
+		reverse_proxy spr:8080
 	}
 
 	route /* {
