@@ -3,6 +3,7 @@ title = "Core data requirements and backing schema"
 author = "cheongyx@cardiff.ac.uk"
 reviewer = ["ChristieE1@cardiff.ac.uk"]
 date = "2026-02-04"
+superseded_by = ["2026-03-07-core-data-schema-update.md"]
 +++
 
 ## Scope

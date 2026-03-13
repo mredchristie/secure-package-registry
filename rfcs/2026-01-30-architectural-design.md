@@ -3,6 +3,7 @@ title = "Architectural Design and Components"
 authors = ["cheongyx@cardiff.ac.uk"]
 reviewers = ["ReadB5@cardiff.ac.uk"]
 creation = "2026-01-30"
+superseded_by = ["2026-03-07-behavioral-analysis-pipeline.md", "2026-03-07-core-data-schema-update.md"]
 +++
 
 ## Goals and constraints
