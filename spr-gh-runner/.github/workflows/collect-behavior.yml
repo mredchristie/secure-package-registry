@@ -1,0 +1,227 @@
+name: Analyze Package Behavior
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: 'Package name (e.g., lodash)'
+        required: true
+        type: string
+      version:
+        description: 'Package version (e.g., 4.17.21)'
+        required: true
+        type: string
+      registry:
+        description: 'Registry preset'
+        required: true
+        type: choice
+        options:
+          - gitea
+          - npm
+        default: gitea
+
+env:
+  GITEA_REGISTRY_URL: https://git.duti.dev
+  GITEA_REGISTRY_OWNER: spr-sandbox
+  NPM_REGISTRY_URL: https://registry.npmjs.org
+  TRACEE_VERSION: v0.24.1
+  TOOLS_RELEASE: tools-latest
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download test-generator from releases
+        run: |
+          echo "Downloading test-generator from releases..."
+          wget -q "https://github.com/${{ github.repository }}/releases/download/${{ env.TOOLS_RELEASE }}/test-generator" -O /tmp/test-generator
+          chmod +x /tmp/test-generator
+          echo "✅ test-generator downloaded"
+          
+          echo "Downloading templates..."
+          mkdir -p /tmp/templates
+          wget -q "https://github.com/${{ github.repository }}/releases/download/${{ env.TOOLS_RELEASE }}/templates.tar.gz" -O /tmp/templates.tar.gz
+          tar -xzf /tmp/templates.tar.gz -C /tmp/templates
+          echo "✅ Templates extracted"
+          
+          echo "TOOLS_DIR=/tmp" >> "$GITHUB_ENV"
+          echo "TEMPLATES_DIR=/tmp/templates" >> "$GITHUB_ENV"
+
+      - name: Validate inputs
+        run: |
+          if [[ -z "${{ inputs.package }}" ]]; then
+            echo "❌ ERROR: Package name cannot be empty"
+            exit 1
+          fi
+          if [[ -z "${{ inputs.version }}" ]]; then
+            echo "❌ ERROR: Version cannot be empty"
+            exit 1
+          fi
+          echo "✅ Input validation passed: ${{ inputs.package }}@${{ inputs.version }}"
+
+      - name: Select registry preset
+        id: registry
+        run: |
+          case "${{ inputs.registry }}" in
+            gitea)
+              echo "type=gitea" >> "$GITHUB_OUTPUT"
+              echo "url=${{ env.GITEA_REGISTRY_URL }}" >> "$GITHUB_OUTPUT"
+              echo "owner=${{ env.GITEA_REGISTRY_OWNER }}" >> "$GITHUB_OUTPUT"
+              echo "npm_config_registry=${{ env.GITEA_REGISTRY_URL }}/api/packages/${{ env.GITEA_REGISTRY_OWNER }}/npm/" >> "$GITHUB_OUTPUT"
+              ;;
+            npm)
+              echo "type=npm" >> "$GITHUB_OUTPUT"
+              echo "url=${{ env.NPM_REGISTRY_URL }}" >> "$GITHUB_OUTPUT"
+              echo "owner=" >> "$GITHUB_OUTPUT"
+              echo "npm_config_registry=${{ env.NPM_REGISTRY_URL }}/" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "Unsupported registry preset: ${{ inputs.registry }}" >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Generate test package
+        run: |
+          if [[ -n "${{ steps.registry.outputs.owner }}" ]]; then
+            /tmp/test-generator \
+              --package "${{ inputs.package }}" \
+              --version "${{ inputs.version }}" \
+              --output ./test-pkg \
+              --registry-url "${{ steps.registry.outputs.url }}" \
+              --registry-type "${{ steps.registry.outputs.type }}" \
+              --registry-owner "${{ steps.registry.outputs.owner }}" \
+              --templates-dir "${TEMPLATES_DIR}"
+          else
+            /tmp/test-generator \
+              --package "${{ inputs.package }}" \
+              --version "${{ inputs.version }}" \
+              --output ./test-pkg \
+              --registry-url "${{ steps.registry.outputs.url }}" \
+              --registry-type "${{ steps.registry.outputs.type }}" \
+              --templates-dir "${TEMPLATES_DIR}"
+          fi
+          
+          echo "✅ Test package generated"
+          ls -la ./test-pkg/
+
+      - name: Set normalized package name
+        id: normalize
+        run: |
+          pkg_name="${{ inputs.package }}"
+          if [[ "$pkg_name" == @*/* ]]; then
+            normalized="${pkg_name/@/}"
+            normalized="${normalized//\//__}"
+          else
+            normalized="$pkg_name"
+          fi
+          echo "normalized=$normalized" >> "$GITHUB_OUTPUT"
+          echo "✅ Normalized: $pkg_name → $normalized"
+
+      - name: Download and setup Tracee
+        run: |
+          echo "Downloading Tracee CLI..."
+          wget -q "https://github.com/aquasecurity/tracee/releases/download/${{ env.TRACEE_VERSION }}/tracee-x86_64.${{ env.TRACEE_VERSION }}.tar.gz"
+          echo "Extracting Tracee..."
+          tar -xzf "tracee-x86_64.${{ env.TRACEE_VERSION }}.tar.gz"
+          mkdir -p /tmp/tracee-out
+          echo "✅ Tracee ready"
+
+      - name: Create isolated container
+        run: |
+          echo "Creating isolated container..."
+          docker run -d --name analysis \
+            --network host \
+            -e NPM_CONFIG_REGISTRY=${{ steps.registry.outputs.npm_config_registry }} \
+            node:20 sleep 3600
+          echo "✅ Container created"
+
+      - name: Start Tracee monitoring
+        run: |
+          echo "Starting Tracee to capture container activity..."
+          sudo mkdir -p /tmp/tracee-work
+          sudo chmod 777 /tmp/tracee-work
+          sudo ./dist/tracee \
+            --install-path /tmp/tracee-work \
+            --scope container \
+            --events execve,execveat,open,openat,connect,net_packet_dns_request,net_packet_dns_response \
+            --output json:/tmp/tracee-out/behavior.jsonl &
+          TRACEE_PID=$!
+          echo "Tracee started with PID: $TRACEE_PID"
+          echo "TRACEE_PID=$TRACEE_PID" >> "$GITHUB_ENV"
+          sleep 5
+          if ps -p $TRACEE_PID > /dev/null; then
+            echo "✅ Tracee is running and capturing container activity"
+          else
+            echo "❌ ERROR: Tracee failed to start"
+            exit 1
+          fi
+
+      - name: Run install test
+        run: |
+          echo "=== Running Install Test ==="
+          docker exec analysis mkdir -p /test
+          docker cp ./test-pkg/${{ steps.normalize.outputs.normalized }}@${{ inputs.version }}/install/. analysis:/test/
+          docker exec analysis sh -c "cd /test && npm install" || echo "⚠️ Install test completed with exit code $?"
+          echo "✅ Install test finished"
+
+      - name: Run import test
+        run: |
+          echo "=== Running Import Test ==="
+          docker cp ./test-pkg/${{ steps.normalize.outputs.normalized }}@${{ inputs.version }}/import/. analysis:/test/
+          docker exec analysis sh -c "cd /test && node index.js" || echo "⚠️ Import test completed with exit code $?"
+          echo "✅ Import test finished"
+
+      - name: Run prototype pollution test
+        run: |
+          echo "=== Running Prototype Pollution Test ==="
+          docker cp ./test-pkg/${{ steps.normalize.outputs.normalized }}@${{ inputs.version }}/prototype/. analysis:/test/
+          docker exec analysis sh -c "cd /test && node test-prototype.js" || echo "⚠️ Prototype test completed with exit code $?"
+          echo "✅ Prototype test finished"
+
+      - name: Run CLI test (if applicable)
+        run: |
+          # HAS_CLI marker is created by test-generator when the package declares a bin field
+          if [ -f "./test-pkg/${{ steps.normalize.outputs.normalized }}@${{ inputs.version }}/cli/HAS_CLI" ]; then
+            echo "=== Running CLI Test ==="
+            echo "Testing CLI via npx with --version flag..."
+            docker exec analysis sh -c "cd /test && timeout 30s npx ${{ inputs.package }} --version" || echo "⚠️ CLI test completed with exit code $?"
+            echo "✅ CLI test finished"
+          else
+            echo "ℹ️ No CLI test (package has no bin entry)"
+          fi
+
+      - name: Stop Tracee and collect results
+        if: always()
+        run: |
+          echo "Stopping Tracee (PID: $TRACEE_PID)..."
+          sudo kill "$TRACEE_PID" 2>/dev/null || true
+          wait "$TRACEE_PID" 2>/dev/null || true
+          sleep 2
+          sudo chmod -R 777 /tmp/tracee-out/
+          echo "Tracee output contents:"
+          ls -la /tmp/tracee-out/ || echo "No output directory"
+          if [ -f /tmp/tracee-out/behavior.jsonl ]; then
+            echo "✅ Tracee captured $(wc -l < /tmp/tracee-out/behavior.jsonl) events"
+            echo "First 10 events (for debugging):"
+            head -10 /tmp/tracee-out/behavior.jsonl || true
+          else
+            echo "⚠️ No tracee output file found"
+          fi
+
+      - name: Cleanup container
+        if: always()
+        run: |
+          echo "Cleaning up container..."
+          docker stop analysis 2>/dev/null || true
+          docker rm analysis 2>/dev/null || true
+          echo "✅ Cleanup complete"
+
+      - name: Upload behavioral analysis results
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: behavior-${{ steps.normalize.outputs.normalized }}-${{ inputs.version }}-${{ github.run_id }}
+          path: /tmp/tracee-out/behavior.jsonl
+          retention-days: 1
+
