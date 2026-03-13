@@ -14,7 +14,7 @@ func TestNewCoreConfig_Defaults(t *testing.T) {
 
 	assert.Equal(t, "amqp://admin:admin@rabbitmq:5672/", cfg.RabbitMQURL)
 	assert.Equal(t, "postgres://postgres:postgres@core_db:5432/core?sslmode=disable", cfg.DatabaseURL)
-	assert.Equal(t, "http://valkey:6379", cfg.ValkeyURL)
+	assert.Equal(t, "valkey:6379", cfg.ValkeyURL)
 	assert.Equal(t, "8080", cfg.CoreSvc.ExternalPort)
 	assert.Equal(t, "8081", cfg.CoreSvc.InternalPort)
 }

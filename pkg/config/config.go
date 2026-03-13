@@ -14,6 +14,22 @@ type NPMConfig struct {
 	HTTPTransport http.RoundTripper
 }
 
+type GitHubConfig struct {
+	Token         string
+	Owner         string
+	Repo          string
+	WorkflowFile  string
+	HTTPTransport http.RoundTripper
+}
+
+type MinIOConfig struct {
+	Endpoint  string
+	AccessKey string
+	SecretKey string
+	UseSSL    bool
+	Bucket    string
+}
+
 // This includes configuration required by all microservices. For example, RabbitMQ connection details are required to communicate between the services
 type CoreSvcConfig struct {
 	ExternalPort string
@@ -27,6 +43,8 @@ type CoreConfig struct {
 
 	CoreSvc CoreSvcConfig
 	NPM     NPMConfig
+	GitHub  GitHubConfig
+	MinIO   MinIOConfig
 }
 
 type modifier func(*CoreConfig)
@@ -36,10 +54,16 @@ func NewCoreConfig(modifiers ...modifier) *CoreConfig {
 	cfg := &CoreConfig{
 		RabbitMQURL: "amqp://admin:admin@rabbitmq:5672/",
 		DatabaseURL: "postgres://postgres:postgres@core_db:5432/core?sslmode=disable",
-		ValkeyURL:   "http://valkey:6379",
+		ValkeyURL:   "valkey:6379",
 		CoreSvc: CoreSvcConfig{
 			ExternalPort: "8080",
 			InternalPort: "8081",
+		},
+		MinIO: MinIOConfig{
+			Endpoint:  "minio:9000",
+			AccessKey: "minio",
+			SecretKey: "minio_pass",
+			Bucket:    "behavior",
 		},
 	}
 
@@ -66,6 +90,17 @@ func WithEnv() modifier {
 			} else {
 				cfg.NPM.HTTPTimeout = 10 * time.Second
 			}
+		}
+		cfg.GitHub.Token = getEnv("GITHUB_TOKEN", "")
+		cfg.GitHub.Owner = getEnv("GITHUB_OWNER", "")
+		cfg.GitHub.Repo = getEnv("GITHUB_REPO", "")
+		cfg.GitHub.WorkflowFile = getEnv("GITHUB_WORKFLOW_FILE", "collect-behavior.yml")
+		cfg.MinIO.Endpoint = getEnv("MINIO_ENDPOINT", cfg.MinIO.Endpoint)
+		cfg.MinIO.AccessKey = getEnv("MINIO_ACCESS_KEY", cfg.MinIO.AccessKey)
+		cfg.MinIO.SecretKey = getEnv("MINIO_SECRET_KEY", cfg.MinIO.SecretKey)
+		cfg.MinIO.Bucket = getEnv("MINIO_BUCKET", cfg.MinIO.Bucket)
+		if sslStr := getEnv("MINIO_USE_SSL", ""); sslStr != "" {
+			cfg.MinIO.UseSSL = sslStr == "true" || sslStr == "1"
 		}
 	}
 }
