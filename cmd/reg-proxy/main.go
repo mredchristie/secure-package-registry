@@ -89,7 +89,10 @@ func main() {
 		if err != nil {
 			return err
 		}
-		resp.Body.Close()
+		err = resp.Body.Close()
+		if err != nil {
+			return err
+		}
 
 		// Replace internal hostname with proxy host
 		rewritten := bytes.ReplaceAll(

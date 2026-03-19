@@ -10,7 +10,8 @@ fix:
 
   go tool gofumpt -l -w .
 
-  go tool golangci-lint run --fix
+  # Will have to be installed separately, golangci-lint doesn't recommend using it as a dependency https://golangci-lint.run/docs/welcome/install/local/
+  golangci-lint run --fix
 
   cd ./dashboard-ui/ && bun ci && bun run format && cd ..
   cd ./home-ui/ && bun ci && bun run format && cd ..
@@ -24,7 +25,8 @@ check:
 
   go tool gofumpt -e -l .
 
-  go tool golangci-lint run
+  # Will have to be installed separately, golangci-lint doesn't recommend using it as a dependency https://golangci-lint.run/docs/welcome/install/local/
+  golangci-lint run
 
   cd ./dashboard-ui/ && bun ci && bun run check && cd ..
   cd ./home-ui/ && bun ci && bun run check && cd ..

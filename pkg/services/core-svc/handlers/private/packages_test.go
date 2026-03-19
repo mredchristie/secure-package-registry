@@ -112,6 +112,18 @@ func (m *mockQuerier) GetSucceededCollectionTask(context.Context, coredb.GetSucc
 	panic("not used")
 }
 
+func (m *mockQuerier) GetUserByToken(ctx context.Context, tokenHash string) (string, error) {
+	panic("not used")
+}
+
+func (m *mockQuerier) InsertUserToken(ctx context.Context, arg coredb.InsertUserTokenParams) (int32, error) {
+	panic("not used")
+}
+
+func (m *mockQuerier) InsertUser(ctx context.Context, arg coredb.InsertUserParams) (string, error) {
+	panic("not used")
+}
+
 type mockPublisher struct {
 	published []*publishedMessage
 	err       error
