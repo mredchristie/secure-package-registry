@@ -1,3 +1,6 @@
+# Generated Containerfiles
+cmd/rep-build/npmjs/**/Containerfile
+
 # Dependencies
 node_modules/
 

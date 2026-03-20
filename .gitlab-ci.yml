@@ -1,11 +1,24 @@
 stages:
-  - sync
+  - sync_repro_build
+  - sync_gh_runner
   - check
 
 image: golang:1.25.6
 
+variables:
+  GIT_DEPTH: 0
+
+mirror_reproducible_build:
+  stage: sync_repro_build
+  only:
+    - branches
+  script:
+    - git fetch --all
+    - SPLIT_COMMIT=$(git subtree split --prefix=cmd/rep-build)
+    - git push https://BenjyRead:${GITHUB_TOKEN}@github.com/BenjyRead/Registry-Reproducible-Builds.git $SPLIT_COMMIT:$CI_COMMIT_REF_NAME --force
+
 sync_runner:
-  stage: sync
+  stage: sync_gh_runner
   only:
     - main
   script:

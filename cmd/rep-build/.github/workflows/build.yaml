@@ -1,0 +1,59 @@
+name: Reproducible Build
+
+on:
+  push:
+    # branches: [main]
+    # paths:
+    #   - 'cmd/rep-build/**'
+  workflow_dispatch:
+
+jobs:
+  repro:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v6
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y podman yq
+          curl -o /usr/local/bin/gomplate -sSL https://github.com/hairyhenderson/gomplate/releases/download/v5.0.0/gomplate_linux-amd64
+          chmod 755 /usr/local/bin/gomplate
+
+
+      #TODO: automatically scan the leaf nodes of the dependency graph for build.yaml files instead of hardcoding the path
+      - name: Generate Containerfiles
+        run: |
+          set -e
+          set -x
+          # Read template name
+          package_dir="npmjs/svelte/5.48.2"
+          template_path="$package_dir/build.yaml"
+          template_name=$(yq -r ".TEMPLATE" "$template_path")
+          containerfile_path="templates/$template_name"
+
+
+          gomplate -c .="$template_path" -f "$containerfile_path" -o "$package_dir/Containerfile"
+
+      - name: Build Container Images
+        run: |
+          podman build -f npmjs/svelte/5.48.2/Containerfile \
+          -t svelte:5.48.2 .
+
+      - name: Run reproducibility checks
+        run: |
+          set -e
+          podman run --rm --name svelte-test svelte:5.48.2
+
+      - name: Extract build artifacts
+        run: |
+          podman create --name extract svelte:5.48.2
+          podman cp extract:tmp/build.tgz ./svelte-5.48.2.tgz
+          podman rm extract
+
+      - name: Upload built artifact
+        uses : actions/upload-artifact@v6
+        with:
+          name: svelte-5.48.2-build
+          path: svelte-5.48.2.tgz
