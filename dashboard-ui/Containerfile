@@ -2,6 +2,9 @@
 FROM docker.io/oven/bun:1 AS builder
 WORKDIR /app
 
+ARG PUBLIC_HOME_BASE_URL="http://localhost:5173"
+ENV PUBLIC_HOME_BASE_URL=${PUBLIC_HOME_BASE_URL}
+
 # Copy package files
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
