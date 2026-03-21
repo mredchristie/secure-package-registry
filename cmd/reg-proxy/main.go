@@ -14,19 +14,13 @@ import (
 	"strings"
 
 	"git.duti.dev/secure-package-registry/internal/gen/coredb"
+	"git.duti.dev/secure-package-registry/pkg/config"
 	"git.duti.dev/secure-package-registry/pkg/logger"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
 )
 
 var log zerolog.Logger
-
-func getEnv(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
-}
 
 func hashToken(token string) string {
 	// Placeholder for actual hashing logic
@@ -38,12 +32,10 @@ func hashToken(token string) string {
 func main() {
 	log = logger.WithComponent("reg-proxy")
 	ctx := context.Background()
-
-	// Database connection string
-	databaseURL := getEnv("DATABASE_URL", "postgres://postgres:postgres@core_db:5432/core?sslmode=disable")
+	cfg := config.NewCoreConfig(config.WithEnv())
 
 	// Connect to database
-	pool, err := pgxpool.New(ctx, databaseURL)
+	pool, err := pgxpool.New(ctx, cfg.ReverseProxy.DatabaseURL)
 	if err != nil {
 		log.Err(err).Msgf("Failed to connect to database")
 		os.Exit(1)
@@ -97,8 +89,8 @@ func main() {
 		// Replace internal hostname with proxy host
 		rewritten := bytes.ReplaceAll(
 			body,
-			[]byte("http://gitea:3000"),
-			[]byte("http://localhost:7002"),
+			[]byte(cfg.ReverseProxy.InternalURL),
+			[]byte(cfg.ReverseProxy.ExternalURL),
 		)
 
 		resp.Body = io.NopCloser(bytes.NewBuffer(rewritten))

@@ -7,6 +7,12 @@ import (
 	"time"
 )
 
+type ReverseProxyConfig struct {
+	InternalURL string
+	ExternalURL string
+	DatabaseURL string
+}
+
 type NPMConfig struct {
 	RegistryURL   string
 	ReplicateURL  string
@@ -41,10 +47,11 @@ type CoreConfig struct {
 	DatabaseURL string
 	ValkeyURL   string
 
-	CoreSvc CoreSvcConfig
-	NPM     NPMConfig
-	GitHub  GitHubConfig
-	MinIO   MinIOConfig
+	CoreSvc      CoreSvcConfig
+	NPM          NPMConfig
+	GitHub       GitHubConfig
+	MinIO        MinIOConfig
+	ReverseProxy ReverseProxyConfig
 }
 
 type modifier func(*CoreConfig)
@@ -64,6 +71,11 @@ func NewCoreConfig(modifiers ...modifier) *CoreConfig {
 			AccessKey: "minio",
 			SecretKey: "minio_pass",
 			Bucket:    "behavior",
+		},
+		ReverseProxy: ReverseProxyConfig{
+			InternalURL: "http://gitea:3000",
+			ExternalURL: "http://localhost:7002",
+			DatabaseURL: "postgres://postgres:postgres@core_db:5432/core?sslmode=disable",
 		},
 	}
 
@@ -102,6 +114,10 @@ func WithEnv() modifier {
 		if sslStr := getEnv("MINIO_USE_SSL", ""); sslStr != "" {
 			cfg.MinIO.UseSSL = sslStr == "true" || sslStr == "1"
 		}
+
+		cfg.ReverseProxy.InternalURL = getEnv("REVERSE_PROXY_INTERNAL_URL", cfg.ReverseProxy.InternalURL)
+		cfg.ReverseProxy.ExternalURL = getEnv("REVERSE_PROXY_EXTERNAL_URL", cfg.ReverseProxy.ExternalURL)
+		cfg.ReverseProxy.DatabaseURL = getEnv("REVERSE_PROXY_DATABASE_URL", cfg.ReverseProxy.DatabaseURL)
 	}
 }
 
