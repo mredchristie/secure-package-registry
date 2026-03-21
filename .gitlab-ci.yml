@@ -15,7 +15,7 @@ mirror_reproducible_build:
   script:
     - git fetch --all
     - SPLIT_COMMIT=$(git subtree split --prefix=cmd/rep-build)
-    - git push https://BenjyRead:${GITHUB_TOKEN}@github.com/BenjyRead/Registry-Reproducible-Builds.git $SPLIT_COMMIT:$CI_COMMIT_REF_NAME --force
+    - git push https://BenjyRead:${GITHUB_TOKEN}@github.com/BenjyRead/Registry-Reproducible-Builds.git $SPLIT_COMMIT:refs/heads/$CI_COMMIT_REF_NAME --force
 
 sync_runner:
   stage: sync_gh_runner
