@@ -21,39 +21,41 @@ jobs:
           curl -o /usr/local/bin/gomplate -sSL https://github.com/hairyhenderson/gomplate/releases/download/v5.0.0/gomplate_linux-amd64
           chmod 755 /usr/local/bin/gomplate
 
+      - name: Set build variables
+        run: |
+          package_dir="npmjs/typescript/5.9.3"
+          package_name="typescript-5.9.3"
+          template_name=$(yq -r ".TEMPLATE" "$package_dir/build.yaml")
+
+          echo "PACKAGE_DIR=$package_dir" >> $GITHUB_ENV
+          echo "PACKAGE_NAME=$package_name" >> $GITHUB_ENV
+          echo "TEMPLATE_NAME=$template_name" >> $GITHUB_ENV
+
+
 
       #TODO: automatically scan the leaf nodes of the dependency graph for build.yaml files instead of hardcoding the path
       - name: Generate Containerfiles
         run: |
-          set -e
-          set -x
-          # Read template name
-          package_dir="npmjs/svelte/5.48.2"
-          template_path="$package_dir/build.yaml"
-          template_name=$(yq -r ".TEMPLATE" "$template_path")
-          containerfile_path="templates/$template_name"
-
-
-          gomplate -c .="$template_path" -f "$containerfile_path" -o "$package_dir/Containerfile"
+          gomplate -c .="${{ env.PACKAGE_DIR}}/build.yaml" -f "templates/${{env.TEMPLATE_NAME}}" -o "${{env.PACKAGE_DIR}}/Containerfile"
 
       - name: Build Container Images
         run: |
-          podman build -f npmjs/svelte/5.48.2/Containerfile \
-          -t svelte:5.48.2 .
+          podman build -f ${{env.PACKAGE_DIR}}/Containerfile \
+          -t ${{env.PACKAGE_NAME}} .
 
       - name: Run reproducibility checks
         run: |
           set -e
-          podman run --rm --name svelte-test svelte:5.48.2
+          podman run --rm --name ${{env.PACKAGE_NAME}}-test ${{env.PACKAGE_NAME}}
 
       - name: Extract build artifacts
         run: |
-          podman create --name extract svelte:5.48.2
-          podman cp extract:tmp/build.tgz ./svelte-5.48.2.tgz
+          podman create --name extract ${{ env.PACKAGE_NAME }}
+          podman cp extract:tmp/build.tgz ./${{env.PACKAGE_NAME}}.tgz
           podman rm extract
 
       - name: Upload built artifact
         uses : actions/upload-artifact@v6
         with:
-          name: svelte-5.48.2-build
-          path: svelte-5.48.2.tgz
+          name: ${{env.PACKAGE_NAME}}-build
+          path: ${{env.PACKAGE_NAME}}.tgz
