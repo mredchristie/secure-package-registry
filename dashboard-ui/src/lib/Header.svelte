@@ -1,12 +1,13 @@
 <script lang="ts">
-  // import { browser } from '$app/environment';
-  // import { isLoggedIn } from './utils/auth';
-
-  export let isDark = true;
-  export let onToggleTheme: () => void;
-  export let isLoggedIn: boolean = false;
-
   import { PUBLIC_HOME_BASE_URL } from "$env/static/public";
+
+  interface Props {
+    isDark?: boolean;
+    onToggleTheme: () => void;
+    isLoggedIn?: boolean;
+  }
+
+  let { isDark = true, onToggleTheme, isLoggedIn = false }: Props = $props();
 </script>
 
 <header>
@@ -14,30 +15,25 @@
     <div class="logo">
       <a class="clear-a-stylings" href="{PUBLIC_HOME_BASE_URL}/">SPR</a>
     </div>
-    <a href="/docs" class="nav-link">Docs</a>
-    <a href="/pricing" class="nav-link">Pricing</a>
+    <a href="{PUBLIC_HOME_BASE_URL}/docs" class="nav-link">Docs</a>
+    <a href="{PUBLIC_HOME_BASE_URL}/pricing" class="nav-link">Pricing</a>
   </div>
   <div class="header-middle">
     <form class="search-bar" method="get" action="/search">
-      <input
-        type="text"
-        name="searchbar"
-        placeholder="Search Packages..."
-        class=""
-      />
+      <input type="text" name="searchbar" placeholder="Search Packages..." />
       <button type="submit" class="search-button"> Search </button>
     </form>
   </div>
   {#if isLoggedIn}
     <div class="header-right">
-      <button class="theme-toggle" on:click={onToggleTheme}>
+      <button class="theme-toggle" onclick={onToggleTheme}>
         {isDark ? "Light" : "Dark"}
       </button>
       <a href="/login" class="navbar-button"> Log Out </a>
     </div>
   {:else}
     <div class="header-right">
-      <button class="theme-toggle" on:click={onToggleTheme}>
+      <button class="theme-toggle" onclick={onToggleTheme}>
         {isDark ? "Light" : "Dark"}
       </button>
       <a href="/login" class="navbar-button"> Log In</a>

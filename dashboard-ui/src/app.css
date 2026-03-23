@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens matching home-ui color palette.
+ * These CSS variables are consumed by both the Tailwind theme (via @theme)
+ * and legacy scoped CSS in public pages.
+ *
+ * Light / dark mode is toggled via the .dark class on the root .app div.
+ */
+
+@theme {
+	/* Map CSS variables to Tailwind so we can use e.g. bg-primary, text-accent */
+	--color-primary: var(--bg-primary);
+	--color-secondary: var(--bg-secondary);
+	--color-accent: var(--accent);
+	--color-accent-hover: var(--accent-hover);
+	--color-border: var(--border);
+	--color-card: var(--card-bg);
+	--color-card-border: var(--card-border);
+}

@@ -1,21 +1,18 @@
 <script lang="ts">
-  // imports kinda self explanitory
   import { onMount } from "svelte";
   import Header from "$lib/Header.svelte";
   import favicon from "$lib/assets/favicon.svg";
-  // svelte 5 feature props - children contains all page content.
-  let { children } = $props();
-  // Theme state = true (dark mode) and = false (light mode)
+  import "../app.css";
+
+  let { children, data } = $props();
   let isDark = $state(true);
 
-  // Restore saved theme preference from browser storage
   onMount(() => {
     const saved = localStorage.getItem("isDark");
     if (saved !== null) isDark = saved === "true";
   });
 
   function toggleTheme() {
-    // Toggle theme and persist to localStorage
     isDark = !isDark;
     localStorage.setItem("isDark", isDark.toString());
   }
@@ -27,7 +24,7 @@
 </svelte:head>
 
 <div class="app" class:dark={isDark}>
-  <Header {isDark} onToggleTheme={toggleTheme} />
+  <Header {isDark} onToggleTheme={toggleTheme} isLoggedIn={data.isLoggedIn} />
   <!-- Header component with theme toggle (appears on all pages) -->
   {@render children()}
   <!-- Page content rendered here via {@render children()} -->
@@ -35,20 +32,20 @@
 
 <style>
   /*
-    CSS custom properties defined here cascade to all child pages.
-    Only variables live here — all other styles belong in their own files.
+      CSS custom properties defined here cascade to all child pages.
+      Only variables live here — all other styles belong in their own files.
 
-    Color variable reference — light / dark
-    --bg-primary:     #fff            / #0a0a0f
-    --bg-secondary:   #fafafa         / #1a1a2e
-    --text-primary:   #111            / #fff
-    --text-secondary: #4b5563         / #ccc
-    --accent:         #1d4ed8 (blue)  / #4fc3f7 (sky blue)
-    --accent-hover:   #1e40af         / #51cf66 (green)
-    --border:         #e5e7eb         / #2a2a3e
-    --card-bg:        #fff            / rgba(26,26,46,0.5)
-    --card-border:    #e5e7eb         / rgba(79,195,247,0.2)
-  */
+      Color variable reference — light / dark
+      --bg-primary:     #fff            / #0a0a0f
+      --bg-secondary:   #fafafa         / #1a1a2e
+      --text-primary:   #111            / #fff
+      --text-secondary: #4b5563         / #ccc
+      --accent:         #1d4ed8 (blue)  / #4fc3f7 (sky blue)
+      --accent-hover:   #1e40af         / #51cf66 (green)
+      --border:         #e5e7eb         / #2a2a3e
+      --card-bg:        #fff            / rgba(26,26,46,0.5)
+      --card-border:    #e5e7eb         / rgba(79,195,247,0.2)
+    */
 
   /* Light mode */
   .app {
@@ -61,6 +58,9 @@
     --border: #e5e7eb;
     --card-bg: #fff;
     --card-border: #e5e7eb;
+    /* wb = White Black */
+    --wb-bg: white;
+    --wb-bg-invert: black;
 
     font-family:
       system-ui,
@@ -86,6 +86,8 @@
     --border: #2a2a3e;
     --card-bg: rgba(26, 26, 46, 0.5);
     --card-border: rgba(79, 195, 247, 0.2);
+    --wb-bg: black;
+    --wb-bg-invert: white;
   }
 
   /* Universal resets — intentionally global */

@@ -1,42 +1,11 @@
 <script lang="ts">
-  import { onMount } from "svelte";
-  // Types matching the API
-  interface PackageSummary {
-    identifier: string;
-    ecosystem: "npm" | "go" | "cargo" | "pypi";
-    latest_version: string;
-    description: string;
-    author: string;
-    updatedAgo: string;
-    trustScore: number;
-    tier: string;
-    tags: string[];
-  }
+  import { searchAPI } from "$lib/api";
+  import type {
+    PackageSummary,
+    PackageVersionDetail,
+    Ecosystem,
+  } from "$lib/types/api";
 
-  interface SearchResult {
-    items: PackageSummary[];
-  }
-
-  interface PackageVersion {
-    identifier: string;
-    ecosystem: string;
-    version: string;
-    latest: boolean;
-    source: {
-      url: string;
-      tag: string;
-      commit: string;
-    };
-    trust_level: number;
-    maintainer_notes: string;
-    tags: Array<{
-      label: string;
-      value_type: "boolean" | "integer" | "float";
-      data: string; // base64 encoded JSON
-    }>;
-  }
-
-  // Decode base64 and parse JSON value
   function decodeTagValue(data: string): string {
     try {
       const parsed = JSON.parse(atob(data));
@@ -49,90 +18,67 @@
   }
 
   function trustColor(score: number): string {
-    if (score >= 90) return "#16a34a";
-    if (score >= 70) return "#f59e0b";
-    return "#dc2626";
+    if (score >= 90) return "trust-high";
+    if (score >= 70) return "trust-medium";
+    return "trust-low";
   }
 
-  let searchQuery = "";
-  let selectedEcosystem: "" | "npm" | "go" | "cargo" | "pypi" = "";
-  let searchResults: PackageSummary[] = [];
-  let selectedPackage: PackageVersion | null = null;
+  const ecosystemColors: Record<Ecosystem, string> = {
+    npm: "eco-npm",
+    go: "eco-go",
+    cargo: "eco-cargo",
+    pypi: "eco-pypi",
+  };
 
-  let loading = false;
-  let error = "";
-  let hasSearched = false;
+  let searchQuery = $state("");
+  let selectedEcosystem = $state<"" | Ecosystem>("");
+  let searchResults = $state<PackageSummary[]>([]);
+  let selectedPackage = $state<PackageVersionDetail | null>(null);
+  let loading = $state(false);
+  let error = $state("");
+  let hasSearched = $state(false);
 
   const ecosystems = [
-    { label: "All Ecosystems", value: "" },
-    { label: "npm", value: "npm" },
-    { label: "Go", value: "go" },
-    { label: "Cargo", value: "cargo" },
-    { label: "PyPI", value: "pypi" },
-  ] as const;
+    { label: "All Ecosystems", value: "" as const },
+    { label: "npm", value: "npm" as const },
+    { label: "Go", value: "go" as const },
+    { label: "Cargo", value: "cargo" as const },
+    { label: "PyPI", value: "pypi" as const },
+  ];
 
-  onMount(async () => {
-    await loadDefaultPackages();
-  });
+  let filteredResults = $derived(
+    searchResults.filter((p) => {
+      const q = searchQuery.trim().toLowerCase();
 
-  async function loadDefaultPackages() {
-    loading = true;
-    error = "";
+      const matchesQuery =
+        !q ||
+        p.identifier.toLowerCase().includes(q) ||
+        (p.description ?? "").toLowerCase().includes(q) ||
+        (p.tags ?? []).some((t) => t.toLowerCase().includes(q));
 
-    try {
-      const response = await fetch(`/api/v1/svc/packages`);
-      if (!response.ok) throw new Error();
+      const matchesEco =
+        !selectedEcosystem || p.ecosystem === selectedEcosystem;
 
-      const data: SearchResult = await response.json();
-      searchResults = data.items ?? [];
-      hasSearched = true;
-    } catch {
-      error = "Failed to load packages.";
-    } finally {
-      loading = false;
-    }
-  }
-
-  $: filteredResults = searchResults.filter((p) => {
-    const q = searchQuery.trim().toLowerCase();
-
-    const matchesQuery =
-      !q ||
-      p.identifier.toLowerCase().includes(q) ||
-      p.description.toLowerCase().includes(q) ||
-      p.tags.some((t) => t.toLowerCase().includes(q));
-
-    const matchesEco = !selectedEcosystem || p.ecosystem === selectedEcosystem;
-
-    return matchesQuery && matchesEco;
-  });
+      return matchesQuery && matchesEco;
+    }),
+  );
 
   async function searchPackages() {
+    if (!searchQuery.trim()) {
+      error = "Please enter a search term.";
+      return;
+    }
+
     loading = true;
     error = "";
     selectedPackage = null;
     hasSearched = true;
 
     try {
-      const params = new URLSearchParams();
-
-      if (searchQuery.trim()) {
-        params.append("q", searchQuery);
-      }
-
-      if (selectedEcosystem) {
-        params.append("ecosystem", selectedEcosystem);
-      }
-
-      const queryString = params.toString();
-      const url = queryString
-        ? `/api/v1/svc/packages?${queryString}`
-        : `/api/v1/svc/packages`;
-
-      const response = await fetch(url);
-      if (!response.ok) throw new Error("Search failed");
-
-      const data: SearchResult = await response.json();
+      const data = await searchAPI.search(
+        searchQuery.trim(),
+        selectedEcosystem || undefined,
+      );
       searchResults = data.items ?? [];
     } catch {
       error = "Failed to search packages. Please try again.";
@@ -147,14 +93,11 @@
     error = "";
 
     try {
-      const safeIdentifier = encodeURIComponent(pkg.identifier);
-
-      const response = await fetch(
-        `/api/v1/svc/packages/${pkg.ecosystem}/${safeIdentifier}/${pkg.latest_version}`,
+      selectedPackage = await searchAPI.getVersion(
+        pkg.ecosystem,
+        pkg.identifier,
+        pkg.latest_version,
       );
-      if (!response.ok) throw new Error("Failed to fetch package details");
-
-      selectedPackage = await response.json();
     } catch {
       error = "Failed to fetch package details.";
       selectedPackage = null;
@@ -166,7 +109,7 @@
   function clearSelection() {
     selectedPackage = null;
   }
-  // Handle Enter key in search input
+
   function handleKeydown(event: KeyboardEvent) {
     if (event.key === "Enter") searchPackages();
   }
@@ -174,66 +117,70 @@
 
 <main>
   {#if error}
-    <div class="error">{error}</div>
+    <div class="error-banner">{error}</div>
   {/if}
 
   {#if selectedPackage}
-    <!-- ── DETAIL VIEW ── -->
-    <div class="detail-card">
-      <button class="back-button" on:click={clearSelection}
-        >← Back to results</button
-      >
+    <!-- Detail View -->
+    <div class="card">
+      <button onclick={clearSelection} class="back-button">
+        ← Back to results
+      </button>
 
       <div class="detail-header">
         <div>
           <h2>{selectedPackage.identifier}</h2>
-          <span class="eco-badge {selectedPackage.ecosystem}">
+          <span
+            class="eco-badge {ecosystemColors[
+              selectedPackage.ecosystem as Ecosystem
+            ] ?? 'eco-npm'}"
+          >
             {selectedPackage.ecosystem}
           </span>
         </div>
 
-        <div
-          class="trust-circle"
-          style="--tc: {trustColor(selectedPackage.trust_level)}"
-        >
-          <span class="trust-num">{selectedPackage.trust_level}</span>
-          <span class="trust-lbl">Trust</span>
+        <div class="trust-circle {trustColor(selectedPackage.trust_level)}">
+          <span class="trust-score">{selectedPackage.trust_level}</span>
+          <span class="trust-label">Trust</span>
         </div>
       </div>
 
       <div class="detail-grid">
         <div class="detail-item">
-          <div class="label">Version</div>
-          <div class="value">
+          <div class="detail-label">Version</div>
+          <div class="detail-value">
             {selectedPackage.version}
-            {#if selectedPackage.latest}<span class="badge-latest">Latest</span
-              >{/if}
+            {#if selectedPackage.latest}
+              <span class="badge-latest">Latest</span>
+            {/if}
           </div>
         </div>
 
         <div class="detail-item">
-          <div class="label">Trust Level</div>
-          <div class="value">{selectedPackage.trust_level} / 100</div>
+          <div class="detail-label">Trust Level</div>
+          <div class="detail-value">{selectedPackage.trust_level} / 100</div>
         </div>
 
         <div class="detail-item">
-          <div class="label">Source Tag</div>
-          <div class="value mono">{selectedPackage.source.tag}</div>
+          <div class="detail-label">Source Tag</div>
+          <div class="detail-value mono">{selectedPackage.source.tag}</div>
         </div>
 
         <div class="detail-item">
-          <div class="label">Commit</div>
-          <div class="value mono">{selectedPackage.source.commit}</div>
+          <div class="detail-label">Commit</div>
+          <div class="detail-value mono">{selectedPackage.source.commit}</div>
         </div>
 
-        <div class="detail-item full-width">
-          <div class="label">Maintainer Notes</div>
-          <p class="notes">{selectedPackage.maintainer_notes}</p>
-        </div>
+        {#if selectedPackage.maintainer_notes}
+          <div class="detail-item full-width">
+            <div class="detail-label">Maintainer Notes</div>
+            <p class="notes">{selectedPackage.maintainer_notes}</p>
+          </div>
+        {/if}
 
         {#if selectedPackage.tags?.length}
           <div class="detail-item full-width">
-            <div class="label">Tags</div>
+            <div class="detail-label">Tags</div>
             <div class="tags-list">
               {#each selectedPackage.tags as tag}
                 <div class="tag-item">
@@ -247,77 +194,91 @@
       </div>
     </div>
   {:else}
-    <!-- ── SEARCH VIEW ── -->
-    <div class="search-card">
+    <!-- Search View -->
+    <div class="card search-card">
       <div class="search-row">
         <input
           type="text"
           bind:value={searchQuery}
-          on:keydown={handleKeydown}
-          placeholder="Search packages…"
+          onkeydown={handleKeydown}
+          placeholder="Search packages..."
           class="search-input"
         />
 
-        <select bind:value={selectedEcosystem} class="eco-select">
+        <select bind:value={selectedEcosystem} class="ecosystem-select">
           {#each ecosystems as eco}
             <option value={eco.value}>{eco.label}</option>
           {/each}
         </select>
 
-        <button on:click={searchPackages} disabled={loading} class="btn-search">
-          {loading ? "Searching…" : "Search"}
+        <button
+          onclick={searchPackages}
+          disabled={loading}
+          class="search-button"
+        >
+          {loading ? "Searching..." : "Search"}
         </button>
-
-        <button class="btn-add" type="button">+ Add Package</button>
       </div>
 
       {#if hasSearched && !loading}
-        <div class="results-meta">
+        <div class="result-count">
           {searchResults.length} package{searchResults.length !== 1 ? "s" : ""} found
         </div>
       {/if}
     </div>
 
     {#if loading}
-      <div class="state-msg">Searching…</div>
+      <div class="status-message">Searching...</div>
     {:else if hasSearched && searchResults.length === 0}
-      <div class="state-msg">No packages matched your query.</div>
+      <div class="status-message">No packages matched your query.</div>
     {:else if searchResults.length > 0}
-      <ul class="cards">
+      <ul class="results-list">
         {#each filteredResults as pkg}
           <li>
             <button
-              class="card"
-              on:click={() => selectPackage(pkg)}
+              class="result-card"
+              onclick={() => selectPackage(pkg)}
               type="button"
             >
-              <div class="card-header">
-                <div class="card-id-row">
-                  <span class="card-identifier">{pkg.identifier}</span>
-                  <span class="eco-badge {pkg.ecosystem}">{pkg.ecosystem}</span>
+              <div class="result-top">
+                <div class="result-name-row">
+                  <span class="result-name">{pkg.identifier}</span>
+                  <span
+                    class="eco-badge {ecosystemColors[pkg.ecosystem] ??
+                      'eco-npm'}"
+                  >
+                    {pkg.ecosystem}
+                  </span>
                 </div>
 
-                <div
-                  class="trust-pill"
-                  style="--tc: {trustColor(pkg.trustScore ?? 0)}"
-                >
+                <span class="trust-pill {trustColor(pkg.trustScore ?? 0)}">
                   {pkg.trustScore ?? 0}
+                </span>
+              </div>
+
+              {#if pkg.description}
+                <p class="result-description">{pkg.description}</p>
+              {/if}
+
+              {#if pkg.tags?.length}
+                <div class="result-tags">
+                  {#each pkg.tags as t}
+                    <span class="result-tag">{t}</span>
+                  {/each}
                 </div>
-              </div>
+              {/if}
 
-              <p class="card-desc">{pkg.description}</p>
-
-              <div class="card-tags">
-                {#each pkg.tags as t}
-                  <span class="tag">{t}</span>
-                {/each}
-              </div>
-
-              <div class="card-footer">
+              <div class="result-meta">
                 <span>v{pkg.latest_version}</span>
-                <span>{pkg.author}</span>
-                <span>{pkg.updatedAgo}</span>
-                <span class="tier-label">{pkg.tier}</span>
+                {#if pkg.author}
+                  <span>{pkg.author}</span>
+                {/if}
+                {#if pkg.updatedAgo}
+                  <span>{pkg.updatedAgo}</span>
+                {/if}
+                {#if pkg.tier}
+                  <span class="result-tier">{pkg.tier}</span>
+                {/if}
               </div>
             </button>
           </li>
@@ -327,268 +288,308 @@
   {/if}
 </main>
 
-<footer>SPR &copy; 2026</footer>
-
 <style>
   main {
     max-width: 1000px;
     margin: 0 auto;
     padding: 1.5rem 1.25rem 4rem;
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-    color: var(--text-primary);
   }
 
-  .search-card {
-    background: var(--card-bg);
-    border: 1px solid var(--card-border);
+  /* Error banner */
+  .error-banner {
+    margin-bottom: 1rem;
+    padding: 1rem;
+    border-radius: 12px;
+    border: 1px solid rgba(220, 38, 38, 0.2);
+    background: rgba(220, 38, 38, 0.08);
+    color: #dc2626;
+  }
+
+  /* Card base */
+  .card {
     border-radius: 14px;
-    padding: 1.1rem;
+    border: 1px solid var(--card-border);
+    background: var(--card-bg);
+    padding: 1.5rem;
+  }
+
+  /* Search form */
+  .search-card {
+    margin-bottom: 1rem;
   }
 
   .search-row {
     display: grid;
-    grid-template-columns: 1fr 180px auto auto;
-    gap: 0.65rem;
+    grid-template-columns: 1fr 180px auto;
+    gap: 0.625rem;
     align-items: center;
   }
 
-  .search-input,
-  .eco-select {
-    padding: 0.7rem 0.9rem;
+  .search-input {
+    padding: 0.625rem 0.875rem;
+    font-size: 0.93rem;
     border-radius: 10px;
     border: 1px solid var(--border);
     background: var(--bg-secondary);
     color: var(--text-primary);
-    font-size: 0.93rem;
     outline: none;
-    transition: border-color 0.15s;
-    min-width: 0;
+    transition: border-color 0.2s;
   }
 
-  .search-input:focus,
-  .eco-select:focus {
+  .search-input::placeholder {
+    color: var(--text-secondary);
+  }
+
+  .search-input:focus {
     border-color: var(--accent);
   }
 
-  .btn-search,
-  .btn-add {
-    padding: 0.7rem 1.1rem;
-    font-size: 0.9rem;
-    font-weight: 700;
+  .ecosystem-select {
+    padding: 0.625rem 0.875rem;
+    font-size: 0.93rem;
     border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    outline: none;
     cursor: pointer;
+    appearance: auto;
+  }
+
+  .ecosystem-select:focus {
+    border-color: var(--accent);
+  }
+
+  .search-button {
+    padding: 0.625rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 700;
     white-space: nowrap;
-    transition:
-      background 0.15s,
-      border-color 0.15s;
-  }
-
-  .btn-search {
-    background: var(--accent);
+    border-radius: 10px;
     border: 1px solid var(--accent);
-    color: #ffffff;
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+    transition:
+      background 0.2s,
+      border-color 0.2s;
   }
 
-  .btn-search:hover:not(:disabled) {
+  .search-button:hover:not(:disabled) {
     background: var(--accent-hover);
     border-color: var(--accent-hover);
   }
 
-  .btn-search:disabled {
+  .search-button:disabled {
     opacity: 0.55;
     cursor: not-allowed;
   }
 
-  .btn-add {
-    background: transparent;
-    border: 1px solid var(--accent);
-    color: var(--accent);
-  }
-
-  .btn-add:hover {
-    background: rgba(29, 78, 216, 0.08);
-  }
-
-  .results-meta {
+  .result-count {
     margin-top: 0.75rem;
-    font-size: 0.88rem;
-    color: var(--text-secondary);
+    font-size: 0.875rem;
     font-weight: 600;
-  }
-
-  .error {
-    background: rgba(220, 38, 38, 0.08);
-    border: 1px solid rgba(220, 38, 38, 0.2);
-    color: #b91c1c;
-    padding: 0.9rem 1rem;
-    border-radius: 12px;
-  }
-
-  .state-msg {
-    text-align: center;
     color: var(--text-secondary);
-    padding: 3rem 0;
-    font-size: 0.95rem;
   }
 
-  .cards {
+  .status-message {
+    padding: 3rem 0;
+    text-align: center;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+  }
+
+  /* Results list */
+  .results-list {
     list-style: none;
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
     padding: 0;
-    margin: 0;
   }
 
-  .card {
+  .result-card {
+    display: block;
     width: 100%;
     text-align: left;
-    background: var(--card-bg);
-    border: 1px solid var(--card-border);
+    padding: 1rem;
     border-radius: 12px;
-    padding: 1rem 1.1rem;
+    border: 1px solid var(--card-border);
+    background: var(--card-bg);
     cursor: pointer;
     transition:
-      border-color 0.15s,
-      transform 0.1s;
+      transform 0.15s,
+      border-color 0.15s;
   }
 
-  .card:hover {
-    border-color: rgba(29, 78, 216, 0.35);
+  .result-card:hover {
     transform: translateY(-1px);
+    border-color: rgba(29, 78, 216, 0.35);
   }
 
-  .card-header {
+  .result-top {
     display: flex;
+    align-items: center;
     justify-content: space-between;
-    align-items: center;
-    margin-bottom: 0.45rem;
     gap: 0.75rem;
+    margin-bottom: 0.25rem;
   }
 
-  .card-id-row {
+  .result-name-row {
     display: flex;
     align-items: center;
-    gap: 0.6rem;
+    gap: 0.625rem;
     min-width: 0;
   }
 
-  .card-identifier {
-    font-weight: 800;
+  .result-name {
     font-size: 1.05rem;
+    font-weight: 800;
     color: var(--text-primary);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .trust-pill {
-    font-weight: 800;
-    font-size: 0.88rem;
-    color: var(--tc);
-    border: 1.5px solid var(--tc);
-    border-radius: 999px;
-    padding: 0.2rem 0.6rem;
-    min-width: 2.8rem;
-    text-align: center;
-    background: transparent;
-  }
-
-  .card-desc {
+  .result-description {
+    margin: 0 0 0.625rem;
+    font-size: 0.875rem;
+    line-height: 1.625;
     color: var(--text-secondary);
-    font-size: 0.9rem;
-    line-height: 1.5;
-    margin: 0 0 0.65rem 0;
   }
 
-  .card-tags {
+  .result-tags {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.4rem;
+    gap: 0.375rem;
     margin-bottom: 0.75rem;
   }
 
-  .tag {
+  .result-tag {
+    padding: 0.125rem 0.625rem;
     font-size: 0.76rem;
     font-weight: 700;
-    padding: 0.25rem 0.6rem;
     border-radius: 999px;
     border: 1px solid var(--border);
     background: var(--bg-secondary);
     color: var(--text-secondary);
   }
 
-  .card-footer {
+  .result-meta {
     display: flex;
-    gap: 1.2rem;
-    font-size: 0.82rem;
-    color: var(--text-secondary);
-    border-top: 1px solid var(--border);
-    padding-top: 0.65rem;
-    font-weight: 600;
     flex-wrap: wrap;
+    gap: 1rem;
+    padding-top: 0.625rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-secondary);
   }
 
-  .tier-label {
+  .result-tier {
     margin-left: auto;
-    color: var(--accent);
     font-weight: 700;
+    color: var(--accent);
   }
 
+  /* Ecosystem badges */
   .eco-badge {
+    display: inline-block;
+    padding: 0.125rem 0.5rem;
     font-size: 0.7rem;
     font-weight: 800;
     text-transform: uppercase;
-    padding: 0.22rem 0.55rem;
+    letter-spacing: 0.025em;
     border-radius: 999px;
-    letter-spacing: 0.04em;
-    border: 1px solid var(--border);
-    background: var(--bg-secondary);
+    border: 1px solid;
+    flex-shrink: 0;
+  }
+
+  .eco-npm {
+    border-color: rgba(252, 165, 165, 0.4);
+    color: #b91c1c;
+    background: #fef2f2;
+  }
+
+  .eco-go {
+    border-color: rgba(103, 232, 249, 0.4);
+    color: #0e7490;
+    background: #ecfeff;
+  }
+
+  .eco-cargo {
+    border-color: rgba(253, 186, 116, 0.4);
+    color: #c2410c;
+    background: #fff7ed;
+  }
+
+  .eco-pypi {
+    border-color: rgba(147, 197, 253, 0.4);
+    color: #1d4ed8;
+    background: #eff6ff;
+  }
+
+  /* Trust indicators */
+  .trust-pill {
+    flex-shrink: 0;
+    padding: 0.125rem 0.625rem;
+    font-size: 0.875rem;
+    font-weight: 800;
+    border-radius: 999px;
+    border: 1.5px solid;
+    text-align: center;
+  }
+
+  .trust-circle {
+    flex-shrink: 0;
+    width: 68px;
+    height: 68px;
+    border-radius: 50%;
+    border: 3px solid;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .trust-score {
+    font-size: 1.125rem;
+    font-weight: 900;
+    line-height: 1;
+  }
+
+  .trust-label {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
     color: var(--text-secondary);
   }
 
-  .eco-badge.npm {
-    border-color: rgba(203, 56, 55, 0.35);
-    color: #b91c1c;
-    background: rgba(203, 56, 55, 0.06);
+  .trust-high {
+    color: #16a34a;
+    border-color: #22c55e;
   }
 
-  .eco-badge.go {
-    border-color: rgba(0, 173, 216, 0.35);
-    color: #0369a1;
-    background: rgba(0, 173, 216, 0.06);
+  .trust-medium {
+    color: #f59e0b;
+    border-color: #fbbf24;
   }
 
-  .eco-badge.cargo {
-    border-color: rgba(222, 104, 40, 0.35);
-    color: #c2410c;
-    background: rgba(222, 104, 40, 0.06);
+  .trust-low {
+    color: #dc2626;
+    border-color: #ef4444;
   }
 
-  .eco-badge.pypi {
-    border-color: rgba(55, 148, 225, 0.35);
-    color: #1d4ed8;
-    background: rgba(55, 148, 225, 0.06);
-  }
-
-  .detail-card {
-    background: var(--card-bg);
-    border: 1px solid var(--card-border);
-    border-radius: 14px;
-    padding: 1.5rem;
-  }
-
+  /* Detail view */
   .back-button {
-    background: none;
     border: none;
+    background: transparent;
+    font-size: 0.875rem;
+    font-weight: 700;
     color: var(--accent);
     cursor: pointer;
-    font-size: 0.88rem;
-    font-weight: 700;
     padding: 0;
-    margin-bottom: 1.1rem;
+    margin-bottom: 1rem;
   }
 
   .back-button:hover {
@@ -597,101 +598,73 @@
 
   .detail-header {
     display: flex;
-    justify-content: space-between;
     align-items: flex-start;
-    margin-bottom: 1.25rem;
+    justify-content: space-between;
     gap: 1rem;
+    margin-bottom: 1.25rem;
   }
 
   .detail-header h2 {
     font-size: 1.5rem;
     font-weight: 900;
-    margin: 0 0 0.4rem 0;
     color: var(--text-primary);
-  }
-
-  .trust-circle {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    width: 68px;
-    height: 68px;
-    border-radius: 50%;
-    border: 3px solid var(--tc);
-    flex-shrink: 0;
-    background: transparent;
-  }
-
-  .trust-num {
-    font-weight: 900;
-    font-size: 1.2rem;
-    color: var(--tc);
-    line-height: 1;
-  }
-
-  .trust-lbl {
-    font-size: 0.65rem;
-    font-weight: 700;
-    color: var(--text-secondary);
-    text-transform: uppercase;
+    margin-bottom: 0.25rem;
   }
 
   .detail-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 0.85rem;
+    gap: 0.75rem;
   }
 
   .detail-item {
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
+    padding: 0.75rem;
     border-radius: 10px;
-    padding: 0.8rem;
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
   }
 
   .detail-item.full-width {
     grid-column: span 2;
   }
 
-  .label {
+  .detail-label {
+    margin-bottom: 0.25rem;
     font-size: 0.7rem;
     font-weight: 800;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.05em;
     color: var(--text-secondary);
-    margin-bottom: 0.3rem;
   }
 
-  .value {
-    color: var(--text-primary);
+  .detail-value {
     font-weight: 600;
-    font-size: 0.95rem;
+    color: var(--text-primary);
   }
 
   .mono {
     font-family:
-      ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
-      monospace;
-    font-size: 0.85rem;
+      ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.875rem;
   }
 
   .badge-latest {
-    background: #16a34a;
-    color: white;
-    padding: 0.18rem 0.45rem;
-    border-radius: 6px;
+    display: inline-block;
+    margin-left: 0.25rem;
+    padding: 0.125rem 0.375rem;
     font-size: 0.72rem;
     font-weight: 800;
-    margin-left: 0.4rem;
+    border-radius: 6px;
+    background: #16a34a;
+    color: #fff;
     vertical-align: middle;
   }
 
   .notes {
-    color: var(--text-primary);
-    line-height: 1.6;
-    font-size: 0.9rem;
     margin: 0;
+    font-size: 0.875rem;
+    line-height: 1.625;
+    color: var(--text-primary);
   }
 
   .tags-list {
@@ -701,43 +674,31 @@
   }
 
   .tag-item {
-    background: var(--bg-primary);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 0.35rem 0.65rem;
     display: flex;
     align-items: center;
     gap: 0.5rem;
+    padding: 0.25rem 0.625rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg-primary);
   }
 
   .tag-label {
+    font-size: 0.875rem;
     font-weight: 800;
     color: var(--accent);
-    font-size: 0.85rem;
   }
 
   .tag-value {
+    font-size: 0.875rem;
     font-weight: 600;
     color: var(--text-secondary);
-    font-size: 0.85rem;
   }
 
-  footer {
-    text-align: center;
-    color: var(--text-secondary);
-    font-size: 0.78rem;
-    padding: 1.5rem 0;
-    font-weight: 600;
-  }
-
-  @media (max-width: 700px) {
+  /* Responsive */
+  @media (max-width: 640px) {
     .search-row {
       grid-template-columns: 1fr;
-    }
-
-    .btn-search,
-    .btn-add {
-      width: 100%;
     }
 
     .detail-grid {
@@ -746,15 +707,6 @@
 
     .detail-item.full-width {
       grid-column: span 1;
-    }
-
-    .tier-label {
-      margin-left: 0;
-    }
-
-    .topbar-right {
-      flex-wrap: wrap;
-      justify-content: flex-end;
     }
   }
 </style>
