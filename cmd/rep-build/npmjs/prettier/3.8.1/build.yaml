@@ -1,0 +1,13 @@
+TEMPLATE: Yarn_Containerfile
+REPO_URL: https://github.com/prettier/prettier.git
+COMMIT_SHA: 90983f40dce5e20beea4e5618b5e0426a6a7f4f0
+OFFICIAL_TGZ_URL: https://registry.npmjs.org/prettier/-/prettier-3.8.1.tgz
+# CUSTOM_YARN: true
+# CUSTOM_YARN_PATH: .yarn/releases/yarn-4.12.0.cjs
+NODE_IMAGE: node:24-alpine
+USE_NPM_PACK: true
+CUSTOM_PACK_DIR: dist/prettier
+SCRIPTS_FIELD_REMOVAL: true
+TAB_SIZE: 2
+CHMOD_FILE: true
+CHMOD_FILE_PATH: dist/prettier/bin/prettier.cjs

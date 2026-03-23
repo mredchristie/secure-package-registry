@@ -1,0 +1,13 @@
+TEMPLATE: NPM_Containerfile
+REPO_URL: https://github.com/sveltejs/prettier-plugin-svelte.git
+COMMIT_SHA: c49666618cf11c38517f3241c139ab05a30332ea
+OFFICIAL_TGZ_URL: https://registry.npmjs.org/prettier-plugin-svelte/-/prettier-plugin-svelte-3.2.8.tgz
+UNIX2DOS_FILES:
+  - LICENSE
+  - src/lib/elements.ts
+  - src/base64-string.ts
+  - src/lib/snipTagContent.ts
+  - src/print/doc-helpers.ts
+  - src/lib/getText.ts
+  - src/lib/extractAttributes.ts
+
