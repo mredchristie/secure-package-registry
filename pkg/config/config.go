@@ -45,6 +45,7 @@ type CoreConfig struct {
 	RabbitMQURL string
 	DatabaseURL string
 	ValkeyURL   string
+	MockData    bool
 
 	CoreSvc      CoreSvcConfig
 	NPM          NPMConfig
@@ -115,6 +116,10 @@ func WithEnv() modifier {
 
 		cfg.ReverseProxy.InternalURL = getEnv("REVERSE_PROXY_INTERNAL_URL", cfg.ReverseProxy.InternalURL)
 		cfg.ReverseProxy.ExternalURL = getEnv("REVERSE_PROXY_EXTERNAL_URL", cfg.ReverseProxy.ExternalURL)
+
+		if mockStr := getEnv("SPR_MOCK", ""); mockStr != "" {
+			cfg.MockData = mockStr == "true" || mockStr == "1"
+		}
 	}
 }
 
