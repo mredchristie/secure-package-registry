@@ -1,6 +1,6 @@
-// Command spr runs all services (core-svc, poller, be-runner) in a single
-// process using an errgroup. If any service returns an error, the remaining
-// services are cancelled and the process exits with the first error.
+// Command spr runs all services (core-svc, poller, be-runner, reg-proxy) in a
+// single process using an errgroup. If any service returns an error, the
+// remaining services are cancelled and the process exits with the first error.
 package main
 
 import (
@@ -12,6 +12,8 @@ import (
 	berunner "git.duti.dev/secure-package-registry/pkg/services/be-runner"
 	coresvc "git.duti.dev/secure-package-registry/pkg/services/core-svc"
 	packagewatcher "git.duti.dev/secure-package-registry/pkg/services/package-watcher"
+	regproxy "git.duti.dev/secure-package-registry/pkg/services/reg-proxy"
+	"git.duti.dev/secure-package-registry/pkg/services/seed"
 
 	"git.duti.dev/secure-package-registry/pkg/config"
 	"git.duti.dev/secure-package-registry/pkg/logger"
@@ -41,6 +43,13 @@ func main() {
 	}
 	defer deps.Close()
 
+	if cfg.MockData {
+		log.Info().Msg("SPR_MOCK=true: seeding database with dev data")
+		if err := seed.Run(ctx, deps); err != nil {
+			log.Fatal().Err(err).Msg("Seeding failed")
+		}
+	}
+
 	g, gCtx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
@@ -53,6 +62,10 @@ func main() {
 
 	g.Go(func() error {
 		return berunner.Start(gCtx, deps)
+	})
+
+	g.Go(func() error {
+		return regproxy.Start(gCtx, deps)
 	})
 
 	if err := g.Wait(); err != nil {
