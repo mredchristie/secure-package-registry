@@ -10,7 +10,6 @@ import (
 type ReverseProxyConfig struct {
 	InternalURL string
 	ExternalURL string
-	DatabaseURL string
 }
 
 type NPMConfig struct {
@@ -75,7 +74,6 @@ func NewCoreConfig(modifiers ...modifier) *CoreConfig {
 		ReverseProxy: ReverseProxyConfig{
 			InternalURL: "http://gitea:3000",
 			ExternalURL: "http://localhost:7002",
-			DatabaseURL: "postgres://postgres:postgres@core_db:5432/core?sslmode=disable",
 		},
 	}
 
@@ -117,7 +115,6 @@ func WithEnv() modifier {
 
 		cfg.ReverseProxy.InternalURL = getEnv("REVERSE_PROXY_INTERNAL_URL", cfg.ReverseProxy.InternalURL)
 		cfg.ReverseProxy.ExternalURL = getEnv("REVERSE_PROXY_EXTERNAL_URL", cfg.ReverseProxy.ExternalURL)
-		cfg.ReverseProxy.DatabaseURL = getEnv("REVERSE_PROXY_DATABASE_URL", cfg.ReverseProxy.DatabaseURL)
 	}
 }
 

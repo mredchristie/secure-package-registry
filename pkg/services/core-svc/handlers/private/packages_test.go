@@ -112,11 +112,7 @@ func (m *mockQuerier) GetSucceededCollectionTask(context.Context, coredb.GetSucc
 	panic("not used")
 }
 
-func (m *mockQuerier) GetUserByToken(ctx context.Context, tokenHash string) (string, error) {
-	panic("not used")
-}
-
-func (m *mockQuerier) InsertUserToken(ctx context.Context, arg coredb.InsertUserTokenParams) (int32, error) {
+func (m *mockQuerier) GetAPIKeyOwner(ctx context.Context, key string) (string, error) {
 	panic("not used")
 }
 

@@ -12,138 +12,84 @@ services:
   ## Uncomment gitea + gitea_db (and comment out gitea-remote) to use a local
   ## Gitea instance. The entrypoint creates accounts, generates tokens, and
   ## seeds the gitea:config key in Valkey automatically.
-  gitea:
-    image: docker.gitea.com/gitea:1.25.4
-    environment:
-      - USER_UID=1000
-      - USER_GID=1000
-      - GITEA__database__DB_TYPE=postgres
-      - GITEA__database__HOST=gitea_db:5432
-      - GITEA__database__NAME=gitea
-      - GITEA__database__USER=gitea
-      - GITEA__database__PASSWD=gitea
-      - GITEA__security__INSTALL_LOCK=true
-      - GITEA_CUSTOM=/data/gitea/custom
-
-    volumes:
-      # Uncomment when necessary. No persistence necessary for testing phase
-      # - ./data/gitea:/data:Z
-      - ./infra/gitea-custom/:/data/gitea/custom:ro
-    entrypoint: ["/bin/sh","-c"]
-    command:
-      - | # Will run every time on startup but commands are idempotent so no worries
-        apk update
-        apk add valkey-cli jq
-        cat >> /etc/s6/gitea/setup << 'GITEA_SETUP'
-        su-exec git /usr/local/bin/gitea migrate
-
-        # Create admin account
-        su-exec git /usr/local/bin/gitea admin user create \
-          --username 'spr-admin' \
-          --password 'spr-admin' \
-          --email admin@local \
-          --admin \
-          --must-change-password=false
-
-        # Create registry account (owns curated/approved packages)
-        su-exec git /usr/local/bin/gitea admin user create \
-          --username 'spr-registry' \
-          --password 'spr-registry' \
-          --email registry@local \
-          --must-change-password=false
-
-        # Create sandbox account (temporary packages during behavioral analysis)
-        su-exec git /usr/local/bin/gitea admin user create \
-          --username 'spr-sandbox' \
-          --password 'spr-sandbox' \
-          --email sandbox@local \
-          --must-change-password=false
-
-        # Generate access tokens for each account
-        su-exec git /usr/local/bin/gitea admin user generate-access-token \
-          --username 'spr-admin' \
-          --token-name "spr-token" \
-          --scopes "all" | sed "s/^.*: //" >/tmp/token-admin.txt
-
-        su-exec git /usr/local/bin/gitea admin user generate-access-token \
-          --username 'spr-registry' \
-          --token-name "spr-token" \
-          --scopes "all" | sed "s/^.*: //" >/tmp/token-registry.txt
-
-        su-exec git /usr/local/bin/gitea admin user generate-access-token \
-          --username 'spr-sandbox' \
-          --token-name "spr-token" \
-          --scopes "all" | sed "s/^.*: //" >/tmp/token-sandbox.txt
-
-        # Build and store gitea:config as a single JSON entry in valkey
-        # NOTE: $$ is required because podman-compose/docker-compose interpolates
-        # $VARNAME in YAML values before the shell sees them. $$ produces a
-        # literal $ in the rendered script.
-        GITEA_CONFIG=$$(jq -nc \
-          --arg admin_user "spr-admin" \
-          --arg admin_token "$$(cat /tmp/token-admin.txt)" \
-          --arg registry_user "spr-registry" \
-          --arg registry_token "$$(cat /tmp/token-registry.txt)" \
-          --arg sandbox_user "spr-sandbox" \
-          --arg sandbox_token "$$(cat /tmp/token-sandbox.txt)" \
-          '{
-            "base_url": "http://gitea:3000",
-            "accounts": {
-              "admin":    { "username": $$admin_user,    "token": $$admin_token },
-              "registry": { "username": $$registry_user, "token": $$registry_token },
-              "sandbox":  { "username": $$sandbox_user,  "token": $$sandbox_token }
-            }
-          }')
-        valkey-cli -h valkey -p 6379 SET gitea:config "$$GITEA_CONFIG" NX
-        GITEA_SETUP
-        /usr/bin/entrypoint /usr/bin/s6-svscan /etc/s6
-    depends_on:
-      gitea_db:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-      valkey:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "valkey-cli -h valkey -p 6379 EXISTS gitea:config | grep -q 1"]
-      interval: 5s
-      timeout: 5s
-      retries: 30
-      start_period: 10s
-
-  ## ---------- Remote Gitea ----------
-  ## Seeds credentials from .env into the gitea:config Valkey key.
-  ## Comment this out and uncomment the gitea + gitea_db services above
-  ## to switch back to a local Gitea instance.
-  # gitea-remote:
-  #   image: docker.io/valkey/valkey:9.0.2-alpine
-  #   depends_on:
-  #     valkey:
-  #       condition: service_healthy
+  # gitea:
+  #   image: docker.gitea.com/gitea:1.25.4
   #   environment:
-  #     - REMOTE_GITEA_BASE_URL=${REMOTE_GITEA_BASE_URL}
-  #     - REMOTE_GITEA_ADMIN_USER=${REMOTE_GITEA_ADMIN_USER}
-  #     - REMOTE_GITEA_ADMIN_TOKEN=${REMOTE_GITEA_ADMIN_TOKEN}
-  #     - REMOTE_GITEA_REGISTRY_USER=${REMOTE_GITEA_REGISTRY_USER}
-  #     - REMOTE_GITEA_REGISTRY_TOKEN=${REMOTE_GITEA_REGISTRY_TOKEN}
-  #     - REMOTE_GITEA_SANDBOX_USER=${REMOTE_GITEA_SANDBOX_USER}
-  #     - REMOTE_GITEA_SANDBOX_TOKEN=${REMOTE_GITEA_SANDBOX_TOKEN}
-  #   entrypoint: ["/bin/sh", "-c"]
-  #   # $$ escapes are required — podman-compose/docker-compose interpolates
-  #   # $VARNAME in YAML values. $$ produces a literal $ in the rendered script.
+  #     - USER_UID=1000
+  #     - USER_GID=1000
+  #     - GITEA__database__DB_TYPE=postgres
+  #     - GITEA__database__HOST=gitea_db:5432
+  #     - GITEA__database__NAME=gitea
+  #     - GITEA__database__USER=gitea
+  #     - GITEA__database__PASSWD=gitea
+  #     - GITEA__security__INSTALL_LOCK=true
+  #     - GITEA_CUSTOM=/data/gitea/custom
+  #
+  #   volumes:
+  #     # Uncomment when necessary. No persistence necessary for testing phase
+  #     # - ./data/gitea:/data:Z
+  #     - ./infra/gitea-custom/:/data/gitea/custom:ro
+  #   ports:
+  #     - "127.0.0.1:7002:3000" # TODO: How should we deal with ssh? Necessary?
+  #   entrypoint: ["/bin/sh","-c"]
   #   command:
-  #     - |
-  #       apk add --no-cache jq >/dev/null 2>&1
+  #     - | # Will run every time on startup but commands are idempotent so no worries
+  #       apk update
+  #       apk add valkey-cli jq
+  #       cat >> /etc/s6/gitea/setup << 'GITEA_SETUP'
+  #       su-exec git /usr/local/bin/gitea migrate
+  #
+  #       # Create admin account
+  #       su-exec git /usr/local/bin/gitea admin user create \
+  #         --username 'spr-admin' \
+  #         --password 'spr-admin' \
+  #         --email admin@local \
+  #         --admin \
+  #         --must-change-password=false
+  #
+  #       # Create registry account (owns curated/approved packages)
+  #       su-exec git /usr/local/bin/gitea admin user create \
+  #         --username 'spr-registry' \
+  #         --password 'spr-registry' \
+  #         --email registry@local \
+  #         --must-change-password=false
+  #
+  #       # Create sandbox account (temporary packages during behavioral analysis)
+  #       su-exec git /usr/local/bin/gitea admin user create \
+  #         --username 'spr-sandbox' \
+  #         --password 'spr-sandbox' \
+  #         --email sandbox@local \
+  #         --must-change-password=false
+  #
+  #       # Generate access tokens for each account
+  #       su-exec git /usr/local/bin/gitea admin user generate-access-token \
+  #         --username 'spr-admin' \
+  #         --token-name "spr-token" \
+  #         --scopes "all" | sed "s/^.*: //" >/tmp/token-admin.txt
+  #
+  #       su-exec git /usr/local/bin/gitea admin user generate-access-token \
+  #         --username 'spr-registry' \
+  #         --token-name "spr-token" \
+  #         --scopes "all" | sed "s/^.*: //" >/tmp/token-registry.txt
+  #
+  #       su-exec git /usr/local/bin/gitea admin user generate-access-token \
+  #         --username 'spr-sandbox' \
+  #         --token-name "spr-token" \
+  #         --scopes "all" | sed "s/^.*: //" >/tmp/token-sandbox.txt
+  #
+  #       # Build and store gitea:config as a single JSON entry in valkey
+  #       # NOTE: $$ is required because podman-compose/docker-compose interpolates
+  #       # $VARNAME in YAML values before the shell sees them. $$ produces a
+  #       # literal $ in the rendered script.
   #       GITEA_CONFIG=$$(jq -nc \
-  #         --arg base_url "$$REMOTE_GITEA_BASE_URL" \
-  #         --arg admin_user "$$REMOTE_GITEA_ADMIN_USER" \
-  #         --arg admin_token "$$REMOTE_GITEA_ADMIN_TOKEN" \
-  #         --arg registry_user "$$REMOTE_GITEA_REGISTRY_USER" \
-  #         --arg registry_token "$$REMOTE_GITEA_REGISTRY_TOKEN" \
-  #         --arg sandbox_user "$$REMOTE_GITEA_SANDBOX_USER" \
-  #         --arg sandbox_token "$$REMOTE_GITEA_SANDBOX_TOKEN" \
+  #         --arg admin_user "spr-admin" \
+  #         --arg admin_token "$$(cat /tmp/token-admin.txt)" \
+  #         --arg registry_user "spr-registry" \
+  #         --arg registry_token "$$(cat /tmp/token-registry.txt)" \
+  #         --arg sandbox_user "spr-sandbox" \
+  #         --arg sandbox_token "$$(cat /tmp/token-sandbox.txt)" \
   #         '{
-  #           "base_url": $$base_url,
+  #           "base_url": "http://gitea:3000",
   #           "accounts": {
   #             "admin":    { "username": $$admin_user,    "token": $$admin_token },
   #             "registry": { "username": $$registry_user, "token": $$registry_token },
@@ -151,7 +97,63 @@ services:
   #           }
   #         }')
   #       valkey-cli -h valkey -p 6379 SET gitea:config "$$GITEA_CONFIG" NX
-  #       echo "Remote Gitea config seeded into Valkey"
+  #       GITEA_SETUP
+  #       /usr/bin/entrypoint /usr/bin/s6-svscan /etc/s6
+  #   depends_on:
+  #     gitea_db:
+  #       condition: service_healthy
+  #     minio:
+  #       condition: service_healthy
+  #     valkey:
+  #       condition: service_healthy
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "valkey-cli -h valkey -p 6379 EXISTS gitea:config | grep -q 1"]
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 30
+  #     start_period: 10s
+
+  ## ---------- Remote Gitea ----------
+  ## Seeds credentials from .env into the gitea:config Valkey key.
+  ## Comment this out and uncomment the gitea + gitea_db services above
+  ## to switch back to a local Gitea instance.
+  gitea-remote:
+    image: docker.io/valkey/valkey:9.0.2-alpine
+    depends_on:
+      valkey:
+        condition: service_healthy
+    environment:
+      - REMOTE_GITEA_BASE_URL=${REMOTE_GITEA_BASE_URL}
+      - REMOTE_GITEA_ADMIN_USER=${REMOTE_GITEA_ADMIN_USER}
+      - REMOTE_GITEA_ADMIN_TOKEN=${REMOTE_GITEA_ADMIN_TOKEN}
+      - REMOTE_GITEA_REGISTRY_USER=${REMOTE_GITEA_REGISTRY_USER}
+      - REMOTE_GITEA_REGISTRY_TOKEN=${REMOTE_GITEA_REGISTRY_TOKEN}
+      - REMOTE_GITEA_SANDBOX_USER=${REMOTE_GITEA_SANDBOX_USER}
+      - REMOTE_GITEA_SANDBOX_TOKEN=${REMOTE_GITEA_SANDBOX_TOKEN}
+    entrypoint: ["/bin/sh", "-c"]
+    # $$ escapes are required — podman-compose/docker-compose interpolates
+    # $VARNAME in YAML values. $$ produces a literal $ in the rendered script.
+    command:
+      - |
+        apk add --no-cache jq >/dev/null 2>&1
+        GITEA_CONFIG=$$(jq -nc \
+          --arg base_url "$$REMOTE_GITEA_BASE_URL" \
+          --arg admin_user "$$REMOTE_GITEA_ADMIN_USER" \
+          --arg admin_token "$$REMOTE_GITEA_ADMIN_TOKEN" \
+          --arg registry_user "$$REMOTE_GITEA_REGISTRY_USER" \
+          --arg registry_token "$$REMOTE_GITEA_REGISTRY_TOKEN" \
+          --arg sandbox_user "$$REMOTE_GITEA_SANDBOX_USER" \
+          --arg sandbox_token "$$REMOTE_GITEA_SANDBOX_TOKEN" \
+          '{
+            "base_url": $$base_url,
+            "accounts": {
+              "admin":    { "username": $$admin_user,    "token": $$admin_token },
+              "registry": { "username": $$registry_user, "token": $$registry_token },
+              "sandbox":  { "username": $$sandbox_user,  "token": $$sandbox_token }
+            }
+          }')
+        valkey-cli -h valkey -p 6379 SET gitea:config "$$GITEA_CONFIG" NX
+        echo "Remote Gitea config seeded into Valkey"
 
   minio:
     image: docker.io/minio/minio:latest
@@ -188,21 +190,21 @@ services:
 
   ## ---------- Local Gitea DB ----------
   ## Uncomment when using local Gitea (see above).
-  gitea_db:
-    image: docker.io/library/postgres:18
-    restart: always
-    environment:
-      - POSTGRES_USER=gitea # TODO: Use environment variables
-      - POSTGRES_PASSWORD=gitea
-      - POSTGRES_DB=gitea
-    # volumes:
-      # Uncomment when necessary
-      # - ./data/postgres:/var/lib/postgresql:Z
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U gitea -d gitea -h localhost"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+  # gitea_db:
+  #   image: docker.io/library/postgres:18
+  #   restart: always
+  #   environment:
+  #     - POSTGRES_USER=gitea # TODO: Use environment variables
+  #     - POSTGRES_PASSWORD=gitea
+  #     - POSTGRES_DB=gitea
+  #   # volumes:
+  #     # Uncomment when necessary
+  #     # - ./data/postgres:/var/lib/postgresql:Z
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U gitea -d gitea -h localhost"]
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 5
 
   valkey:
     image: docker.io/valkey/valkey:9.0.2-alpine
@@ -233,80 +235,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-
-  ## ---------- Local Gitea Registry Seed ----------
-  ## Uncomment when using local Gitea (see above).
-  seed-registry:
-    image: docker.io/library/node:23-alpine
-    entrypoint: ["/bin/sh","-c"]
-    environment:
-      # To use this container, you need to provide one, not really the kind of thing I can set a default for
-      # A token has been saved as a repository secret
-      - GH_TOKEN=${GITHUB_TOKEN}
-    command:
-      - |
-        set -x
-        apk add --no-cache curl valkey-cli github-cli tar jq
-
-        # I believe there is some block on setting environment variables in the command: section of the compose file, so we will have to a temp file instead.
-        while true; do
-          valkey-cli -h valkey GET gitea:config | jq -r '.accounts.admin.token' > /tmp/gitea_token.txt
-          if [ -s /tmp/gitea_token.txt ]; then
-            break
-          fi
-          sleep 2
-        done
-
-        cat >> ~/.npmrc << NPMRC_SETUP
-        registry=http://gitea:3000/api/packages/spr-admin/npm/
-        //gitea:3000/api/packages/spr-admin/npm/:_authToken=$(cat /tmp/gitea_token.txt)
-        always-auth=true
-        NPMRC_SETUP
-
-        cat ~/.npmrc
-
-        mkdir -p /tmp/artifacts
-        cd /tmp/artifacts
-        gh run download 22155394248 --repo BenjyRead/Registry-Reproducible-Builds -n "svelte-5.48.2-build"
-        ls
-
-        tar -xzf svelte-5.48.2.tgz
-        ls
-        cd package
-
-        npm config get registry
-
-        npm publish
-
-        cd ..
-        mkdir pkg
-        cd pkg
-
-        npm pack is-number@6.0.0 --registry https://registry.npmjs.org
-        tar -xzf is-number-6.0.0.tgz
-        cd package
-
-        npm publish
-
-    depends_on:
-      gitea:
-        condition: service_healthy
-      valkey:
-        condition: service_healthy
-
-  ## ---------- Database Seed ----------
-  ## Uncomment when using local Gitea (see above).
-  seed-db:
-    build:
-      context: .
-      dockerfile: cmd/seed/Containerfile
-    depends_on:
-      core_db:
-        condition: service_healthy
-      spr:
-        condition: service_healthy
-
-
   spr:
     build:
       context: .
@@ -319,10 +247,10 @@ services:
       valkey:
         condition: service_healthy
       # For local Gitea: uncomment gitea, comment out gitea-remote
-      gitea:
-        condition: service_healthy
-      # gitea-remote:
-      #   condition: service_completed_successfully
+      # gitea:
+      #   condition: service_healthy
+      gitea-remote:
+        condition: service_completed_successfully
       minio:
         condition: service_healthy
     environment:
@@ -345,12 +273,6 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "nc -z localhost 8080 || exit 1"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
 
   dashboard-ui:
     build:
@@ -380,45 +302,4 @@ services:
       - "127.0.0.1:8000:8000"
     volumes:
       - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
-    depends_on:
-      - spr
-      - dashboard-ui
     restart: unless-stopped
-
-  poller:
-    build:
-      context: .
-      dockerfile: cmd/poller/Containerfile
-    environment:
-      - DB_HOST=core_db
-      - DB_USER=postgres
-      - DB_PASSWORD=postgres
-      - DB_NAME=core
-      - LOG_LEVEL=info
-      - WORKER_COUNT=10
-      - RATE_LIMIT_RPS=0.28
-      - ECOSYSTEM=npm
-      - RABBITMQ_HOST=rabbitmq
-      - RABBITMQ_USER=admin
-      - RABBITMQ_PASSWORD=admin
-    depends_on:
-      core_db:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_started
-      valkey:
-        condition: service_healthy
-    restart: unless-stopped
-
-  gitea-reverse-proxy:
-    ports:
-      - "127.0.0.1:7002:7002"
-    build:
-      context: .
-      dockerfile: cmd/reg-proxy/Containerfile
-    depends_on:
-      # spr:
-      #   condition: service_healthy
-      core_db:
-        condition: service_healthy
-

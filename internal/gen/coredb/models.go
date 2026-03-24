@@ -159,6 +159,31 @@ type Account struct {
 	UpdatedAt             pgtype.Timestamptz
 }
 
+type Apikey struct {
+	ID                  string
+	Name                pgtype.Text
+	Start               pgtype.Text
+	Prefix              pgtype.Text
+	Key                 string
+	ConfigId            string
+	ReferenceId         string
+	RefillInterval      pgtype.Int4
+	RefillAmount        pgtype.Int4
+	LastRefillAt        pgtype.Timestamptz
+	Enabled             bool
+	RateLimitEnabled    bool
+	RateLimitTimeWindow pgtype.Int4
+	RateLimitMax        pgtype.Int4
+	RequestCount        int32
+	Remaining           pgtype.Int4
+	LastRequest         pgtype.Timestamptz
+	ExpiresAt           pgtype.Timestamptz
+	CreatedAt           pgtype.Timestamptz
+	UpdatedAt           pgtype.Timestamptz
+	Permissions         pgtype.Text
+	Metadata            pgtype.Text
+}
+
 type CollectionTask struct {
 	ID               int32
 	PackageVersionID int32
@@ -266,14 +291,6 @@ type User struct {
 	Image         pgtype.Text
 	CreatedAt     pgtype.Timestamptz
 	UpdatedAt     pgtype.Timestamptz
-}
-
-type UserToken struct {
-	ID        int32
-	UserID    string
-	TokenHash string
-	CreatedAt pgtype.Timestamptz
-	ExpiresAt pgtype.Timestamptz
 }
 
 type Verification struct {

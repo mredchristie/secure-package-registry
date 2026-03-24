@@ -11,6 +11,22 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getAPIKeyOwner = `-- name: GetAPIKeyOwner :one
+
+SELECT "referenceId" FROM apikey
+WHERE key = $1
+  AND enabled = TRUE
+  AND ("expiresAt" IS NULL OR "expiresAt" > NOW())
+`
+
+// Auth queries
+func (q *Queries) GetAPIKeyOwner(ctx context.Context, key string) (string, error) {
+	row := q.db.QueryRow(ctx, getAPIKeyOwner, key)
+	var referenceId string
+	err := row.Scan(&referenceId)
+	return referenceId, err
+}
+
 const getCollectionTask = `-- name: GetCollectionTask :one
 SELECT id, package_version_id, source, status,
        workflow_run_id, artifact_bucket, artifact_key,
@@ -208,20 +224,6 @@ func (q *Queries) GetSucceededCollectionTask(ctx context.Context, arg GetSucceed
 	return i, err
 }
 
-const getUserByToken = `-- name: GetUserByToken :one
-SELECT "id" FROM "user" WHERE "id" IN (
-    SELECT user_id FROM user_tokens
-    WHERE token_hash = $1 AND expires_at > NOW()
-)
-`
-
-func (q *Queries) GetUserByToken(ctx context.Context, tokenHash string) (string, error) {
-	row := q.db.QueryRow(ctx, getUserByToken, tokenHash)
-	var id string
-	err := row.Scan(&id)
-	return id, err
-}
-
 const hasActiveCollectionTask = `-- name: HasActiveCollectionTask :one
 SELECT EXISTS(
     SELECT 1 FROM collection_tasks
@@ -389,27 +391,6 @@ type InsertUserParams struct {
 func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) (string, error) {
 	row := q.db.QueryRow(ctx, insertUser, arg.ID, arg.Name)
 	var id string
-	err := row.Scan(&id)
-	return id, err
-}
-
-const insertUserToken = `-- name: InsertUserToken :one
-
-INSERT INTO user_tokens (user_id, token_hash, expires_at)
-VALUES ($1, $2, $3)
-RETURNING id
-`
-
-type InsertUserTokenParams struct {
-	UserID    string
-	TokenHash string
-	ExpiresAt pgtype.Timestamptz
-}
-
-// Auth queries
-func (q *Queries) InsertUserToken(ctx context.Context, arg InsertUserTokenParams) (int32, error) {
-	row := q.db.QueryRow(ctx, insertUserToken, arg.UserID, arg.TokenHash, arg.ExpiresAt)
-	var id int32
 	err := row.Scan(&id)
 	return id, err
 }

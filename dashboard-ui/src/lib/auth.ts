@@ -1,3 +1,4 @@
+import { apiKey } from "@better-auth/api-key";
 import { betterAuth } from "better-auth";
 import { organization } from "better-auth/plugins";
 import { sveltekitCookies } from "better-auth/svelte-kit";
@@ -21,8 +22,7 @@ export const auth = betterAuth({
 
 	plugins: [
 		organization(),
+		apiKey(),
 		sveltekitCookies(getRequestEvent), // make sure this is the last plugin in the array
 	],
 });
-
-// type Session = typeof auth.$Infer.Session;

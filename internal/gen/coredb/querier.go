@@ -9,6 +9,8 @@ import (
 )
 
 type Querier interface {
+	// Auth queries
+	GetAPIKeyOwner(ctx context.Context, key string) (string, error)
 	GetCollectionTask(ctx context.Context, id int32) (CollectionTask, error)
 	GetPackageByEcosystemAndIdentifier(ctx context.Context, arg GetPackageByEcosystemAndIdentifierParams) (GetPackageByEcosystemAndIdentifierRow, error)
 	GetPackageVersion(ctx context.Context, arg GetPackageVersionParams) (GetPackageVersionRow, error)
@@ -16,7 +18,6 @@ type Querier interface {
 	// Finds the succeeded collection task for a given ecosystem, package identifier, and version.
 	// Returns the artifact location needed for serving deduped behavior data.
 	GetSucceededCollectionTask(ctx context.Context, arg GetSucceededCollectionTaskParams) (GetSucceededCollectionTaskRow, error)
-	GetUserByToken(ctx context.Context, tokenHash string) (string, error)
 	// Checks whether an active (pending or running) collection task exists
 	// for the given package version and source. Returns true/false.
 	HasActiveCollectionTask(ctx context.Context, arg HasActiveCollectionTaskParams) (bool, error)
@@ -31,8 +32,6 @@ type Querier interface {
 	InsertTagType(ctx context.Context, arg InsertTagTypeParams) (int32, error)
 	// User/Organisation Queries
 	InsertUser(ctx context.Context, arg InsertUserParams) (string, error)
-	// Auth queries
-	InsertUserToken(ctx context.Context, arg InsertUserTokenParams) (int32, error)
 	// Lists collection tasks with package context, optionally filtered by ecosystem.
 	// Ordered by most recently created first, paginated.
 	ListCollectionTasks(ctx context.Context, arg ListCollectionTasksParams) ([]ListCollectionTasksRow, error)

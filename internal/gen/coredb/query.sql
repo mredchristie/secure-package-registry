@@ -215,16 +215,11 @@ LIMIT 1;
 
 -- Auth queries
 
--- name: InsertUserToken :one
-INSERT INTO user_tokens (user_id, token_hash, expires_at)
-VALUES ($1, $2, $3)
-RETURNING id;
-
--- name: GetUserByToken :one
-SELECT "id" FROM "user" WHERE "id" IN (
-    SELECT user_id FROM user_tokens
-    WHERE token_hash = $1 AND expires_at > NOW()
-);
+-- name: GetAPIKeyOwner :one
+SELECT "referenceId" FROM apikey
+WHERE key = $1
+  AND enabled = TRUE
+  AND ("expiresAt" IS NULL OR "expiresAt" > NOW());
 
 -- User/Organisation Queries
 

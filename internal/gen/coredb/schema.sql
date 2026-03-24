@@ -131,13 +131,30 @@ CREATE TABLE organization_packages (
     UNIQUE(organization_id, package_id)
 );
 
--- v4
+-- v4 — BetterAuth API key plugin
 
-CREATE TABLE user_tokens (
-    id SERIAL PRIMARY KEY,
-    user_id TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
-        token_hash TEXT NOT NULL UNIQUE,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        expires_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+CREATE TABLE "apikey" (
+    "id" text NOT NULL PRIMARY KEY,
+    "name" text,
+    "start" text,
+    "prefix" text,
+    "key" text NOT NULL,
+    "configId" text NOT NULL DEFAULT 'default',
+    "referenceId" text NOT NULL,
+    "refillInterval" integer,
+    "refillAmount" integer,
+    "lastRefillAt" timestamptz,
+    "enabled" boolean NOT NULL DEFAULT TRUE,
+    "rateLimitEnabled" boolean NOT NULL DEFAULT FALSE,
+    "rateLimitTimeWindow" integer,
+    "rateLimitMax" integer,
+    "requestCount" integer NOT NULL DEFAULT 0,
+    "remaining" integer,
+    "lastRequest" timestamptz,
+    "expiresAt" timestamptz,
+    "createdAt" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "permissions" text,
+    "metadata" text
 );
 
