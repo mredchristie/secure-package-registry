@@ -1,7 +1,9 @@
 // Package regproxy implements the registry reverse proxy service.
-// It proxies requests to the internal Gitea registry, rewriting JSON metadata
-// so that clients see external URLs. Requests to /api/packages/ are gated by
-// BetterAuth API key validation (Bearer token, SHA-256/base64url hash lookup).
+// It exposes /npm/* to clients and routes requests to the appropriate Gitea
+// account's package registry. Currently all reads go to the sandbox account;
+// future work will route based on package tags (e.g. reproducibility status).
+// Requests are gated by BetterAuth API key validation (Bearer token,
+// SHA-256/base64url hash lookup).
 package regproxy
 
 import (
@@ -9,6 +11,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httputil"
@@ -42,21 +45,52 @@ func Start(ctx context.Context, deps *services.Deps) error {
 	cfg := deps.Config.ReverseProxy
 	queries := coredb.New(deps.Pool)
 
-	target, err := url.Parse(cfg.InternalURL)
+	// Read the Gitea config from Valkey to get the sandbox account credentials.
+	giteaConfig, err := deps.Valkey.GetGiteaConfig(ctx)
 	if err != nil {
-		return err
+		return fmt.Errorf("loading gitea config from valkey: %w", err)
 	}
+
+	sandboxAccount, ok := giteaConfig.Accounts["sandbox"]
+	if !ok {
+		return fmt.Errorf("gitea config missing sandbox account")
+	}
+
+	log.Info().
+		Str("gitea_base", giteaConfig.BaseURL).
+		Str("sandbox_user", sandboxAccount.Username).
+		Msg("Loaded Gitea config; routing reads to sandbox account")
+
+	target, err := url.Parse(giteaConfig.BaseURL)
+	if err != nil {
+		return fmt.Errorf("parsing gitea base URL: %w", err)
+	}
+
+	// The internal Gitea path prefix for the sandbox account's npm registry.
+	internalPrefix := fmt.Sprintf("/api/packages/%s/npm", sandboxAccount.Username)
 
 	proxy := httputil.NewSingleHostReverseProxy(target)
 
 	proxy.Director = func(req *http.Request) {
 		req.URL.Scheme = target.Scheme
 		req.URL.Host = target.Host
-		req.URL.Path = target.Path + req.URL.Path
+
+		// Rewrite /npm/<rest> -> /api/packages/<sandbox_user>/npm/<rest>
+		rest := strings.TrimPrefix(req.URL.Path, "/npm")
+		req.URL.Path = internalPrefix + rest
+
+		// Inject the sandbox account's Gitea token so Gitea authorises the
+		// request. The client's BetterAuth Bearer token has already been
+		// validated and stripped at this point.
+		req.Header.Set("Authorization", "Bearer "+sandboxAccount.Token)
 	}
 
-	// Rewrite internal hostnames in JSON responses so npm clients see the
-	// external proxy URL (e.g. localhost:7002) instead of gitea:3000.
+	// Rewrite internal Gitea URLs in JSON responses so npm clients see the
+	// external proxy URL instead of internal Gitea paths.
+	// e.g. http://gitea:3000/api/packages/spr-sandbox/npm/... -> http://localhost:7002/npm/...
+	internalURLPrefix := giteaConfig.BaseURL + internalPrefix
+	externalURLPrefix := cfg.ExternalURL + "/npm"
+
 	proxy.ModifyResponse = func(resp *http.Response) error {
 		ct := resp.Header.Get("Content-Type")
 		if !strings.Contains(ct, "application/json") {
@@ -73,8 +107,8 @@ func Start(ctx context.Context, deps *services.Deps) error {
 
 		rewritten := bytes.ReplaceAll(
 			body,
-			[]byte(cfg.InternalURL),
-			[]byte(cfg.ExternalURL),
+			[]byte(internalURLPrefix),
+			[]byte(externalURLPrefix),
 		)
 
 		resp.Body = io.NopCloser(bytes.NewBuffer(rewritten))
@@ -89,8 +123,9 @@ func Start(ctx context.Context, deps *services.Deps) error {
 			Str("path", r.URL.Path).
 			Logger()
 
-		if !strings.HasPrefix(r.URL.Path, "/api/packages/") {
-			proxy.ServeHTTP(w, r)
+		// Only /npm/* paths are served; everything else is not found.
+		if !strings.HasPrefix(r.URL.Path, "/npm/") && r.URL.Path != "/npm" {
+			http.NotFound(w, r)
 			return
 		}
 

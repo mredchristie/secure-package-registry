@@ -32,14 +32,10 @@ func init() {
 	log = logger.WithComponent("core-svc")
 }
 
-// Start runs the core-svc: migrations, HTTP servers, the spr.package.updated consumer,
+// Start runs the core-svc: HTTP servers, the spr.package.updated consumer,
 // and the spr.collection.completed consumer.
 // Blocks until ctx is cancelled, then gracefully shuts down.
 func Start(ctx context.Context, deps *services.Deps) error {
-	if err := deps.RunMigrations(); err != nil {
-		return fmt.Errorf("running migrations: %w", err)
-	}
-
 	db := pkgdb.NewClient(deps.Pool)
 	queries := coredb.New(deps.Pool)
 

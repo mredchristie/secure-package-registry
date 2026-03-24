@@ -43,6 +43,10 @@ func main() {
 	}
 	defer deps.Close()
 
+	if err := deps.RunMigrations(); err != nil {
+		log.Fatal().Err(err).Msg("Failed to run migrations")
+	}
+
 	if cfg.MockData {
 		log.Info().Msg("SPR_MOCK=true: seeding database with dev data")
 		if err := seed.Run(ctx, deps); err != nil {

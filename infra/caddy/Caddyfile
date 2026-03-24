@@ -3,6 +3,10 @@
 }
 
 :8000 {
+	route /npm/* {
+		reverse_proxy spr:7002
+	}
+
 	route /api/v1/svc/* {
 		reverse_proxy spr:8080
 	}
