@@ -32,13 +32,13 @@ The registry proxy sits between npm clients and Gitea's package registry. It nee
 
 Clients authenticate using Bearer tokens in the `Authorization` header:
 
-```
+```text
 Authorization: Bearer <api-key>
 ```
 
 The proxy validates the token as follows:
 
-1. Extract the raw key from the `Bearer ` prefix.
+1. Extract the raw key from the `Bearer` prefix.
 2. Compute `SHA-256(raw_key)` and encode the hash as **base64url with no padding** — this matches BetterAuth's
    `defaultKeyHasher` implementation.
 3. Look up the resulting hash in the `apikey` table's `key` column.
@@ -57,7 +57,7 @@ The proxy validates the token as follows:
 
 The proxy exposes a flat namespace to clients:
 
-```
+```text
 Client request:  GET /npm/<package-name>
 Proxy rewrites:  GET /api/packages/<gitea-account>/npm/<package-name>
 ```
@@ -78,11 +78,11 @@ rewrites these to the external URL `http://localhost:7002/npm/...` so npm client
 The `apikey` table is created by migration `000004_add_apikey.up.sql` and matches the `@better-auth/api-key` v1.5.x
 schema. The key columns relevant to authentication:
 
-| Column        | Purpose                                                           |
-| ------------- | ----------------------------------------------------------------- |
-| `key`         | SHA-256 hash of the raw API key (base64url, no padding)           |
-| `referenceId` | Foreign key to the user who owns the key                          |
-| `enabled`     | Whether the key is active (not currently checked by proxy — TODO) |
+| Column        | Purpose                                                       |
+| ------------- | ------------------------------------------------------------- |
+| `key`         | SHA-256 hash of the raw API key (base64url, no padding)       |
+| `referenceId` | Foreign key to the user who owns the key                      |
+| `enabled`     | Whether the key is active (checked by `GetAPIKeyOwner` query) |
 
 ### Service architecture
 
@@ -138,7 +138,7 @@ podman compose logs spr 2>&1 | grep "Seeded API key"
 
 Look for a line like:
 
-```
+```text
 INF Seeded API key (use as Bearer token) apikey_id=... key_start=abcd1234... raw_key=abcd1234...full64chars...
 ```
 
@@ -199,11 +199,10 @@ before `npm install` or `npm view` will return results.
 
 ## Open Questions
 
-1. **Token revocation / `enabled` check**: The proxy currently does not check the `enabled` column on the `apikey`
-   table. Should we add this check, or defer until the dashboard has a "revoke key" UI?
+1. **Token expiration / `enabled` / `expiresAt` check**: The proxy validates tokens via `GetAPIKeyOwner`, which checks
+   `enabled = TRUE` and that `expiresAt` is either NULL or in the future. Revocation is supported by setting `enabled =
+FALSE` or `expiresAt` to a past timestamp. A dashboard UI for key management is a separate concern.
 2. **Rate limiting**: The `apikey` table has rate-limiting columns (`rateLimitEnabled`, `rateLimitMax`, etc.) from
    BetterAuth. Should the proxy enforce these, or leave rate limiting to a future API gateway?
 3. **Intelligent routing**: When should we implement tag-based routing (e.g. verified packages from `spr-registry`,
    unverified from `spr-sandbox`)? This is blocked on the reproducible builds pipeline being functional.
-4. **Write access control**: Currently the proxy forwards all HTTP methods. Should writes (PUT/DELETE for
-   `npm publish`/`npm unpublish`) require additional permissions or be restricted to certain accounts?

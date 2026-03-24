@@ -3,7 +3,8 @@
 }
 
 :8000 {
-	route /npm/* {
+	@npm path /npm /npm/*
+	route @npm {
 		reverse_proxy spr:7002
 	}
 

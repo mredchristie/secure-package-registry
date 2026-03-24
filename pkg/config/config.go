@@ -8,7 +8,6 @@ import (
 )
 
 type ReverseProxyConfig struct {
-	InternalURL string
 	ExternalURL string
 }
 
@@ -73,7 +72,6 @@ func NewCoreConfig(modifiers ...modifier) *CoreConfig {
 			Bucket:    "behavior",
 		},
 		ReverseProxy: ReverseProxyConfig{
-			InternalURL: "http://gitea:3000",
 			ExternalURL: "http://localhost:7002",
 		},
 	}
@@ -114,7 +112,6 @@ func WithEnv() modifier {
 			cfg.MinIO.UseSSL = sslStr == "true" || sslStr == "1"
 		}
 
-		cfg.ReverseProxy.InternalURL = getEnv("REVERSE_PROXY_INTERNAL_URL", cfg.ReverseProxy.InternalURL)
 		cfg.ReverseProxy.ExternalURL = getEnv("REVERSE_PROXY_EXTERNAL_URL", cfg.ReverseProxy.ExternalURL)
 
 		if mockStr := getEnv("SPR_MOCK", ""); mockStr != "" {
