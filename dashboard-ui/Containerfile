@@ -17,9 +17,10 @@ RUN bun run build
 FROM docker.io/oven/bun:1-slim AS release
 WORKDIR /app
 
-# Copy built application
+# Copy built application and dependencies
 COPY --from=builder /app/build ./build
 COPY --from=builder /app/package.json ./
+COPY --from=builder /app/node_modules ./node_modules
 
 # Expose port
 EXPOSE 3000

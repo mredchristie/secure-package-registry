@@ -187,10 +187,10 @@ services:
       valkey:
         condition: service_healthy
       # For local Gitea: uncomment gitea, comment out gitea-remote
-      # gitea:
-      #   condition: service_healthy
-      gitea-remote:
-        condition: service_completed_successfully
+      gitea:
+        condition: service_healthy
+      # gitea-remote:
+      #   condition: service_completed_successfully
       minio:
         condition: service_healthy
     environment:
