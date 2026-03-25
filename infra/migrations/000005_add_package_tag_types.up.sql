@@ -4,7 +4,7 @@
 INSERT INTO package_tag_types (label, description, value_type) VALUES
     ('reproducible',      'Package version has a verified reproducible build',  'boolean'),
     ('behavior_passed',   'Package version passed behavioral analysis',         'boolean'),
-    ('npm_attestation',   'Package version has npm registry attestation',       'boolean'),
+    ('upstream_attestation', 'Package version has attestation from upstream registry', 'boolean'),
     ('oss_rebuild',       'Package version verified via OSS rebuild',           'boolean'),
     ('manually_approved', 'Package version has been manually approved',         'boolean')
 ON CONFLICT (label) DO UPDATE SET
