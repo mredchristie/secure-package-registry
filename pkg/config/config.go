@@ -40,6 +40,11 @@ type CoreSvcConfig struct {
 	InternalPort string
 }
 
+type OSSRebuildConfig struct {
+	HTTPTimeout   time.Duration
+	HTTPTransport http.RoundTripper
+}
+
 type CoreConfig struct {
 	RabbitMQURL string
 	DatabaseURL string
@@ -51,6 +56,7 @@ type CoreConfig struct {
 	GitHub       GitHubConfig
 	MinIO        MinIOConfig
 	ReverseProxy ReverseProxyConfig
+	OSSRebuild   OSSRebuildConfig
 }
 
 type modifier func(*CoreConfig)
@@ -113,6 +119,13 @@ func WithEnv() modifier {
 		}
 
 		cfg.ReverseProxy.ExternalURL = getEnv("REVERSE_PROXY_EXTERNAL_URL", cfg.ReverseProxy.ExternalURL)
+		if timeoutStr := getEnv("OSS_REBUILD_HTTP_TIMEOUT", "10s"); timeoutStr != "" {
+			if timeout, err := time.ParseDuration(timeoutStr); err == nil {
+				cfg.OSSRebuild.HTTPTimeout = timeout
+			} else {
+				cfg.OSSRebuild.HTTPTimeout = 10 * time.Second
+			}
+		}
 
 		if mockStr := getEnv("SPR_MOCK", ""); mockStr != "" {
 			cfg.MockData = mockStr == "true" || mockStr == "1"
