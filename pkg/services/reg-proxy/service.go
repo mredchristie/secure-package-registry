@@ -148,6 +148,15 @@ func Start(ctx context.Context, deps *services.Deps) error {
 
 		l.Debug().Str("owner", ownerID).Msg("Accepted request")
 		r.Header.Del("Authorization")
+
+		// Only GET requests are allowed. npm publish/publish/unpublish require
+		// different permissions and are not yet supported.
+		if r.Method != http.MethodGet {
+			l.Warn().Str("method", r.Method).Msg("Blocked non-GET request")
+			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
+			return
+		}
+
 		proxy.ServeHTTP(w, r)
 	})
 

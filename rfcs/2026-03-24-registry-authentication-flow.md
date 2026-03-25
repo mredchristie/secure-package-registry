@@ -62,6 +62,10 @@ Client request:  GET /npm/<package-name>
 Proxy rewrites:  GET /api/packages/<gitea-account>/npm/<package-name>
 ```
 
+**Only GET requests are supported.** The proxy blocks PUT, POST, DELETE, and all other HTTP methods with a 405
+"Method Not Allowed" response. npm publish/publish/unpublish requires different permissions and routing logic that is
+not yet implemented.
+
 Currently all reads route to the **sandbox** Gitea account (`spr-sandbox`). The proxy reads the sandbox account
 credentials (username + Gitea token) from the `gitea:config` key in Valkey at startup.
 
