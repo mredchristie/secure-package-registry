@@ -14,13 +14,20 @@ type Querier interface {
 	GetCollectionTask(ctx context.Context, id int32) (CollectionTask, error)
 	GetPackageByEcosystemAndIdentifier(ctx context.Context, arg GetPackageByEcosystemAndIdentifierParams) (GetPackageByEcosystemAndIdentifierRow, error)
 	GetPackageVersion(ctx context.Context, arg GetPackageVersionParams) (GetPackageVersionRow, error)
+	// Looks up a package version row ID by ecosystem, identifier, and version.
+	GetPackageVersionID(ctx context.Context, arg GetPackageVersionIDParams) (int32, error)
 	GetPackageVersionTags(ctx context.Context, arg GetPackageVersionTagsParams) ([]GetPackageVersionTagsRow, error)
 	// Finds the succeeded collection task for a given ecosystem, package identifier, and version.
 	// Returns the artifact location needed for serving deduped behavior data.
 	GetSucceededCollectionTask(ctx context.Context, arg GetSucceededCollectionTaskParams) (GetSucceededCollectionTaskRow, error)
+	// Tag queries
+	// Looks up a tag type ID by its label.
+	GetTagTypeByLabel(ctx context.Context, label string) (int32, error)
 	// Checks whether an active (pending or running) collection task exists
 	// for the given package version and source. Returns true/false.
 	HasActiveCollectionTask(ctx context.Context, arg HasActiveCollectionTaskParams) (bool, error)
+	// Checks whether a package version has a specific tag (by label) set to a truthy value.
+	HasPackageVersionTag(ctx context.Context, arg HasPackageVersionTagParams) (bool, error)
 	// Collection task queries
 	// Inserts a new collection task for a package version + source.
 	// Returns the new row. If a task already exists for this combination,

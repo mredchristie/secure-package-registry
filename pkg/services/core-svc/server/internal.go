@@ -4,13 +4,21 @@ import (
 	"net/http"
 
 	"git.duti.dev/secure-package-registry/internal/gen/coredb"
+	"git.duti.dev/secure-package-registry/pkg/gitea"
 	"git.duti.dev/secure-package-registry/pkg/services/core-svc/handlers/private"
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 )
 
-func NewInternal(addr string, db coredb.Querier, publisher message.Publisher) *Server {
+// InternalDeps bundles the dependencies needed by internal API handlers.
+type InternalDeps struct {
+	Querier         coredb.Querier
+	Publisher       message.Publisher
+	RegistryAccount *gitea.NpmRegistry
+}
+
+func NewInternal(addr string, deps InternalDeps) *Server {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
@@ -22,7 +30,8 @@ func NewInternal(addr string, db coredb.Querier, publisher message.Publisher) *S
 	})
 
 	r.Route("/api/v1/internal", func(r chi.Router) {
-		r.Mount("/packages", private.NewPackageHandler(db, publisher))
+		r.Mount("/packages", private.NewPackageHandler(deps.Querier, deps.Publisher))
+		r.Mount("/reproducible-builds", private.NewReproducibleBuildHandler(deps.Querier, deps.RegistryAccount))
 	})
 
 	return New("internal", addr, r)

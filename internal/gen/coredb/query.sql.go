@@ -141,6 +141,29 @@ func (q *Queries) GetPackageVersion(ctx context.Context, arg GetPackageVersionPa
 	return i, err
 }
 
+const getPackageVersionID = `-- name: GetPackageVersionID :one
+SELECT pv.id
+FROM package_versions pv
+JOIN packages p ON p.id = pv.package_id
+WHERE p.ecosystem = $1
+  AND p.identifier = $2
+  AND pv.version = $3
+`
+
+type GetPackageVersionIDParams struct {
+	Ecosystem  Ecosystem
+	Identifier string
+	Version    string
+}
+
+// Looks up a package version row ID by ecosystem, identifier, and version.
+func (q *Queries) GetPackageVersionID(ctx context.Context, arg GetPackageVersionIDParams) (int32, error) {
+	row := q.db.QueryRow(ctx, getPackageVersionID, arg.Ecosystem, arg.Identifier, arg.Version)
+	var id int32
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getPackageVersionTags = `-- name: GetPackageVersionTags :many
 SELECT
     ptt.label,
@@ -224,6 +247,20 @@ func (q *Queries) GetSucceededCollectionTask(ctx context.Context, arg GetSucceed
 	return i, err
 }
 
+const getTagTypeByLabel = `-- name: GetTagTypeByLabel :one
+
+SELECT id FROM package_tag_types WHERE label = $1
+`
+
+// Tag queries
+// Looks up a tag type ID by its label.
+func (q *Queries) GetTagTypeByLabel(ctx context.Context, label string) (int32, error) {
+	row := q.db.QueryRow(ctx, getTagTypeByLabel, label)
+	var id int32
+	err := row.Scan(&id)
+	return id, err
+}
+
 const hasActiveCollectionTask = `-- name: HasActiveCollectionTask :one
 SELECT EXISTS(
     SELECT 1 FROM collection_tasks
@@ -245,6 +282,41 @@ func (q *Queries) HasActiveCollectionTask(ctx context.Context, arg HasActiveColl
 	var active bool
 	err := row.Scan(&active)
 	return active, err
+}
+
+const hasPackageVersionTag = `-- name: HasPackageVersionTag :one
+SELECT EXISTS(
+    SELECT 1
+    FROM package_version_tags pvt
+    JOIN package_tag_types ptt ON ptt.id = pvt.tag_type
+    JOIN package_versions pv ON pv.id = pvt.package_version
+    JOIN packages p ON p.id = pv.package_id
+    WHERE p.ecosystem = $1
+      AND p.identifier = $2
+      AND pv.version = $3
+      AND ptt.label = $4
+      AND pvt.value = 'true'::jsonb
+) AS has_tag
+`
+
+type HasPackageVersionTagParams struct {
+	Ecosystem  Ecosystem
+	Identifier string
+	Version    string
+	Label      string
+}
+
+// Checks whether a package version has a specific tag (by label) set to a truthy value.
+func (q *Queries) HasPackageVersionTag(ctx context.Context, arg HasPackageVersionTagParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasPackageVersionTag,
+		arg.Ecosystem,
+		arg.Identifier,
+		arg.Version,
+		arg.Label,
+	)
+	var has_tag bool
+	err := row.Scan(&has_tag)
+	return has_tag, err
 }
 
 const insertCollectionTask = `-- name: InsertCollectionTask :one

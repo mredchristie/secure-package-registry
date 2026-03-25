@@ -1,7 +1,8 @@
 // Package regproxy implements the registry reverse proxy service.
 // It exposes /npm/* to clients and routes requests to the appropriate Gitea
-// account's package registry. Currently all reads go to the sandbox account;
-// future work will route based on package tags (e.g. reproducibility status).
+// account's package registry. Tarball downloads for package versions with a
+// "reproducible" tag are served from the registry account (spr-registry);
+// all other requests go to the sandbox account (spr-sandbox).
 // Requests are gated by BetterAuth API key validation (Bearer token,
 // SHA-256/base64url hash lookup).
 package regproxy
@@ -39,13 +40,73 @@ func hashAPIKey(rawKey string) string {
 	return base64.RawURLEncoding.EncodeToString(hash[:])
 }
 
+// parseTarballPath extracts the package name and version from an npm tarball
+// download path. Returns empty strings if the path is not a tarball request.
+//
+// Examples:
+//
+//	/npm/express/-/express-4.18.0.tgz          -> "express", "4.18.0"
+//	/npm/@sveltejs%2fkit/-/kit-2.0.0.tgz       -> "@sveltejs/kit", "2.0.0"
+//	/npm/@sveltejs/kit/-/kit-2.0.0.tgz         -> "@sveltejs/kit", "2.0.0"
+//	/npm/express                                -> "", ""
+func parseTarballPath(path string) (pkgName, version string) {
+	rest := strings.TrimPrefix(path, "/npm/")
+	if rest == path {
+		return "", ""
+	}
+
+	// Find the /-/ separator that precedes the tarball filename.
+	idx := strings.Index(rest, "/-/")
+	if idx < 0 {
+		return "", ""
+	}
+
+	rawPkg := rest[:idx]
+	tarballFile := rest[idx+3:] // after "/-/"
+
+	// Decode percent-encoded scoped names: @scope%2fname -> @scope/name
+	pkgName, err := url.PathUnescape(rawPkg)
+	if err != nil {
+		return "", ""
+	}
+
+	// The tarball filename is <unscoped-name>-<version>.tgz.
+	// For @scope/name, unscoped is "name".
+	unscoped := pkgName
+	if strings.HasPrefix(pkgName, "@") {
+		parts := strings.SplitN(pkgName, "/", 2)
+		if len(parts) == 2 {
+			unscoped = parts[1]
+		}
+	}
+
+	// Strip the unscoped name prefix and ".tgz" suffix to get the version.
+	prefix := unscoped + "-"
+	suffix := ".tgz"
+	if !strings.HasPrefix(tarballFile, prefix) || !strings.HasSuffix(tarballFile, suffix) {
+		return "", ""
+	}
+	version = tarballFile[len(prefix) : len(tarballFile)-len(suffix)]
+
+	return pkgName, version
+}
+
+// accountForRequest determines which Gitea account should serve the request.
+// Tarball downloads for reproducible package versions use the registry account;
+// everything else uses the sandbox account.
+type accountInfo struct {
+	username string
+	token    string
+	prefix   string // Gitea API path prefix: /api/packages/<username>/npm
+}
+
 // Start runs the registry proxy. It blocks until ctx is cancelled, then
 // gracefully shuts down.
 func Start(ctx context.Context, deps *services.Deps) error {
 	cfg := deps.Config.ReverseProxy
 	queries := coredb.New(deps.Pool)
 
-	// Read the Gitea config from Valkey to get the sandbox account credentials.
+	// Read the Gitea config from Valkey to get account credentials.
 	giteaConfig, err := deps.Valkey.GetGiteaConfig(ctx)
 	if err != nil {
 		return fmt.Errorf("loading gitea config from valkey: %w", err)
@@ -55,19 +116,35 @@ func Start(ctx context.Context, deps *services.Deps) error {
 	if !ok {
 		return fmt.Errorf("gitea config missing sandbox account")
 	}
+	registryAccount, ok := giteaConfig.Accounts["registry"]
+	if !ok {
+		return fmt.Errorf("gitea config missing registry account")
+	}
+
+	sandbox := accountInfo{
+		username: sandboxAccount.Username,
+		token:    sandboxAccount.Token,
+		prefix:   fmt.Sprintf("/api/packages/%s/npm", sandboxAccount.Username),
+	}
+	registry := accountInfo{
+		username: registryAccount.Username,
+		token:    registryAccount.Token,
+		prefix:   fmt.Sprintf("/api/packages/%s/npm", registryAccount.Username),
+	}
 
 	log.Info().
 		Str("gitea_base", giteaConfig.BaseURL).
-		Str("sandbox_user", sandboxAccount.Username).
-		Msg("Loaded Gitea config; routing reads to sandbox account")
+		Str("sandbox_user", sandbox.username).
+		Str("registry_user", registry.username).
+		Msg("Loaded Gitea config; routing reproducible builds to registry account")
 
 	target, err := url.Parse(giteaConfig.BaseURL)
 	if err != nil {
 		return fmt.Errorf("parsing gitea base URL: %w", err)
 	}
 
-	// The internal Gitea path prefix for the sandbox account's npm registry.
-	internalPrefix := fmt.Sprintf("/api/packages/%s/npm", sandboxAccount.Username)
+	// routeKey is stored in request context to tell the director which account to use.
+	type routeKey struct{}
 
 	proxy := httputil.NewSingleHostReverseProxy(target)
 
@@ -75,21 +152,23 @@ func Start(ctx context.Context, deps *services.Deps) error {
 		req.URL.Scheme = target.Scheme
 		req.URL.Host = target.Host
 
-		// Rewrite /npm/<rest> -> /api/packages/<sandbox_user>/npm/<rest>
-		rest := strings.TrimPrefix(req.URL.Path, "/npm")
-		req.URL.Path = internalPrefix + rest
+		// Pick the account from context (set by the handler).
+		acct := sandbox
+		if v, ok := req.Context().Value(routeKey{}).(accountInfo); ok {
+			acct = v
+		}
 
-		// Inject the sandbox account's Gitea token so Gitea authorises the
-		// request. The client's BetterAuth Bearer token has already been
-		// validated and stripped at this point.
-		req.Header.Set("Authorization", "Bearer "+sandboxAccount.Token)
+		rest := strings.TrimPrefix(req.URL.Path, "/npm")
+		req.URL.Path = acct.prefix + rest
+		req.Header.Set("Authorization", "Bearer "+acct.token)
 	}
 
 	// Rewrite internal Gitea URLs in JSON responses so npm clients see the
 	// external proxy URL instead of internal Gitea paths.
-	// e.g. http://gitea:3000/api/packages/spr-sandbox/npm/... -> http://localhost:7002/npm/...
-	internalURLPrefix := giteaConfig.BaseURL + internalPrefix
 	externalURLPrefix := cfg.ExternalURL + "/npm"
+
+	sandboxInternalURL := giteaConfig.BaseURL + sandbox.prefix
+	registryInternalURL := giteaConfig.BaseURL + registry.prefix
 
 	proxy.ModifyResponse = func(resp *http.Response) error {
 		ct := resp.Header.Get("Content-Type")
@@ -105,11 +184,9 @@ func Start(ctx context.Context, deps *services.Deps) error {
 			return err
 		}
 
-		rewritten := bytes.ReplaceAll(
-			body,
-			[]byte(internalURLPrefix),
-			[]byte(externalURLPrefix),
-		)
+		// Rewrite URLs from both accounts to the external URL.
+		rewritten := bytes.ReplaceAll(body, []byte(sandboxInternalURL), []byte(externalURLPrefix))
+		rewritten = bytes.ReplaceAll(rewritten, []byte(registryInternalURL), []byte(externalURLPrefix))
 
 		resp.Body = io.NopCloser(bytes.NewBuffer(rewritten))
 		resp.ContentLength = int64(len(rewritten))
@@ -149,14 +226,40 @@ func Start(ctx context.Context, deps *services.Deps) error {
 		l.Debug().Str("owner", ownerID).Msg("Accepted request")
 		r.Header.Del("Authorization")
 
-		// Only GET requests are allowed. npm publish/publish/unpublish require
-		// different permissions and are not yet supported.
+		// Only GET requests are allowed.
 		if r.Method != http.MethodGet {
 			l.Warn().Str("method", r.Method).Msg("Blocked non-GET request")
 			http.Error(w, "Method Not Allowed", http.StatusMethodNotAllowed)
 			return
 		}
 
+		// Determine routing: check if this is a tarball download for a
+		// reproducible package version.
+		acct := sandbox
+		if pkgName, version := parseTarballPath(r.URL.Path); pkgName != "" && version != "" {
+			hasTag, err := queries.HasPackageVersionTag(r.Context(), coredb.HasPackageVersionTagParams{
+				Ecosystem:  coredb.EcosystemNpm,
+				Identifier: pkgName,
+				Version:    version,
+				Label:      "reproducible",
+			})
+			if err != nil {
+				// Non-fatal: fall back to sandbox on lookup failure.
+				l.Warn().Err(err).
+					Str("package", pkgName).
+					Str("version", version).
+					Msg("Failed to check reproducible tag, falling back to sandbox")
+			} else if hasTag {
+				acct = registry
+				l.Info().
+					Str("package", pkgName).
+					Str("version", version).
+					Msg("Routing to registry (reproducible build)")
+			}
+		}
+
+		// Store the chosen account in context for the Director.
+		r = r.WithContext(context.WithValue(r.Context(), routeKey{}, acct))
 		proxy.ServeHTTP(w, r)
 	})
 

@@ -13,6 +13,7 @@ import (
 
 	"git.duti.dev/secure-package-registry/internal/gen/coredb"
 	"git.duti.dev/secure-package-registry/internal/messages"
+	"git.duti.dev/secure-package-registry/pkg/gitea"
 	"git.duti.dev/secure-package-registry/pkg/logger"
 	sprminio "git.duti.dev/secure-package-registry/pkg/minio"
 	"git.duti.dev/secure-package-registry/pkg/pkgdb"
@@ -118,12 +119,27 @@ func Start(ctx context.Context, deps *services.Deps) error {
 		return fmt.Errorf("creating minio client: %w", err)
 	}
 
+	// Load the Gitea config from Valkey for the registry account.
+	giteaConfig, err := deps.Valkey.GetGiteaConfig(ctx)
+	if err != nil {
+		return fmt.Errorf("loading gitea config from valkey: %w", err)
+	}
+	giteaClient := gitea.NewClient(giteaConfig)
+	registryAccount, err := giteaClient.NpmRegistry("registry")
+	if err != nil {
+		return fmt.Errorf("creating gitea registry account client: %w", err)
+	}
+
 	externalServer := server.NewExternal("0.0.0.0:"+deps.Config.CoreSvc.ExternalPort, db, server.AdminDeps{
 		Querier:   queries,
 		Publisher: publisher,
 		MinIO:     minioClient,
 	})
-	internalServer := server.NewInternal("0.0.0.0:"+deps.Config.CoreSvc.InternalPort, queries, publisher)
+	internalServer := server.NewInternal("0.0.0.0:"+deps.Config.CoreSvc.InternalPort, server.InternalDeps{
+		Querier:         queries,
+		Publisher:       publisher,
+		RegistryAccount: registryAccount,
+	})
 
 	externalErrCh := externalServer.Start()
 	internalErrCh := internalServer.Start()

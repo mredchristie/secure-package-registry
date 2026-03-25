@@ -9,7 +9,7 @@ creation = "2026-03-20"
 
 We need reproducible builds, but we don't have time to build them "properly" right now. This RFC describes a pragmatic,
 throwaway solution that uses Gitea's package registry as an abstraction layer. A standalone build tool produces
-artifacts and pushes them to a dedicated Gitea account (`spr-rep`). An internal API validates, registers, and stores
+artifacts and pushes them to a dedicated Gitea account (`spr-registry`). An internal API validates, registers, and stores
 successful builds. Reproducibility status is tracked via package version tags.
 
 When we have more time, we can throw this away and standardize on something like Google's OSS rebuild system.
@@ -28,7 +28,7 @@ easy to replace or upgrade later.
 
 ### Architecture
 
-1. **Gitea as Storage Layer**: A dedicated Gitea account (`spr-rep`) stores reproducible build artifacts. This is our
+1. **Gitea as Storage Layer**: A dedicated Gitea account (`spr-registry`) stores reproducible build artifacts. This is our
    abstraction layer - it doesn't matter how we got the reproducible build, just that we have one.
 
 2. **External Build Tool**: A standalone tool (`cmd/rep-build/`) that:
@@ -39,9 +39,9 @@ easy to replace or upgrade later.
 3. **Internal API**: New endpoint (not public-facing) to register reproducible builds:
    - Validates the package version exists in upstream registry
    - Updates database via tags (reproducibility is just a tag, not a schema change)
-   - Forwards the built package to `spr-rep` Gitea account (we already have a Gitea client there)
+   - Forwards the built package to `spr-registry` Gitea account (we already have a Gitea client there)
 
-4. **Reverse Proxy**: Configuration-based routing to `spr-rep` when reproducible builds are available. The database is
+4. **Reverse Proxy**: Configuration-based routing to `spr-registry` when reproducible builds are available. The database is
    not responsible for routing logic - that's separation of concerns.
 
 ### Build Configuration

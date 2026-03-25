@@ -120,6 +120,18 @@ func (m *mockQuerier) InsertUser(ctx context.Context, arg coredb.InsertUserParam
 	panic("not used")
 }
 
+func (m *mockQuerier) GetPackageVersionID(context.Context, coredb.GetPackageVersionIDParams) (int32, error) {
+	panic("not used")
+}
+
+func (m *mockQuerier) GetTagTypeByLabel(context.Context, string) (int32, error) {
+	panic("not used")
+}
+
+func (m *mockQuerier) HasPackageVersionTag(context.Context, coredb.HasPackageVersionTagParams) (bool, error) {
+	panic("not used")
+}
+
 type mockPublisher struct {
 	published []*publishedMessage
 	err       error

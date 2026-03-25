@@ -213,6 +213,36 @@ WHERE p.ecosystem = $1
   AND ct.artifact_key IS NOT NULL
 LIMIT 1;
 
+-- Tag queries
+
+-- name: GetTagTypeByLabel :one
+-- Looks up a tag type ID by its label.
+SELECT id FROM package_tag_types WHERE label = $1;
+
+-- name: GetPackageVersionID :one
+-- Looks up a package version row ID by ecosystem, identifier, and version.
+SELECT pv.id
+FROM package_versions pv
+JOIN packages p ON p.id = pv.package_id
+WHERE p.ecosystem = $1
+  AND p.identifier = $2
+  AND pv.version = $3;
+
+-- name: HasPackageVersionTag :one
+-- Checks whether a package version has a specific tag (by label) set to a truthy value.
+SELECT EXISTS(
+    SELECT 1
+    FROM package_version_tags pvt
+    JOIN package_tag_types ptt ON ptt.id = pvt.tag_type
+    JOIN package_versions pv ON pv.id = pvt.package_version
+    JOIN packages p ON p.id = pv.package_id
+    WHERE p.ecosystem = $1
+      AND p.identifier = $2
+      AND pv.version = $3
+      AND ptt.label = $4
+      AND pvt.value = 'true'::jsonb
+) AS has_tag;
+
 -- Auth queries
 
 -- name: GetAPIKeyOwner :one
