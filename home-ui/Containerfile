@@ -2,7 +2,7 @@
 FROM docker.io/oven/bun:1 AS builder
 WORKDIR /app
 
-ARG PUBLIC_DASHBOARD_BASE_URL="http://localhost:5174"
+ARG PUBLIC_DASHBOARD_BASE_URL
 ENV PUBLIC_DASHBOARD_BASE_URL=${PUBLIC_DASHBOARD_BASE_URL}
 
 COPY package.json bun.lock ./
