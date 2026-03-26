@@ -1,6 +1,4 @@
-TEMPLATE: NPM_Containerfile
-REPO_URL: https://github.com/microsoft/TypeScript.git
-COMMIT_SHA: c63de15a992d37f0d6cec03ac7631872838602cb
-OFFICIAL_TGZ_URL: https://registry.npmjs.org/typescript/-/typescript-5.9.3.tgz
-GITHEAD_INJECTION: true
-
+template: npm
+repo_url: https://github.com/microsoft/TypeScript.git
+commit_sha: c63de15a992d37f0d6cec03ac7631872838602cb
+githead_injection: true
