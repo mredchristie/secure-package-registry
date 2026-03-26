@@ -2,8 +2,8 @@ services:
   rabbitmq:
     image: docker.io/rabbitmq:4-management
     ports:
-      - "127.0.0.1:7001:15672"
-      - "127.0.0.1:5672:5672" # For testing purposes. Comment out in prod.
+      - "127.0.0.1:10001:15672"
+      - "127.0.0.1:10002:5672" # For testing purposes. Comment out in prod.
     environment:
       RABBITMQ_DEFAULT_USER: "admin"
       RABBITMQ_DEFAULT_PASS: "admin"
@@ -31,7 +31,7 @@ services:
       - ./infra/gitea-custom/:/data/gitea/custom:ro
       - ./infra/gitea/setup.sh:/gitea-setup.sh:ro
     ports:
-      - "127.0.0.1:7004:3000" # Gitea web UI / admin access (moved from 7002 to make room for reg-proxy)
+      - "127.0.0.1:10005:3000" # Gitea web UI (3rd party internal)
     entrypoint: ["/bin/sh","-c"]
     command:
       - | # Will run every time on startup but commands are idempotent so no worries
@@ -101,10 +101,10 @@ services:
     environment:
       - MINIO_ROOT_USER=minio
       - MINIO_ROOT_PASSWORD=minio_pass
-      - MINIO_BROWSER_REDIRECT_URL=http://127.0.0.1:7003
+      - MINIO_BROWSER_REDIRECT_URL=http://127.0.0.1:10004
     ports:
-      - "127.0.0.1:7003:9001"
-      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:10004:9001"
+      - "127.0.0.1:10003:9000"
     # volumes:
       # Uncomment when necessary
       # - ./data/minio:/data:Z
@@ -194,7 +194,8 @@ services:
       minio:
         condition: service_healthy
     ports:
-      - "127.0.0.1:7002:7002" # reg-proxy (npm registry)
+      - "127.0.0.1:7002:7002" # reg-proxy (public)
+      - "127.0.0.1:20001:8081" # internal API (1st party internal)
     environment:
       - LOG_LEVEL=info
       - EXTERNAL_PORT=8080
@@ -231,7 +232,7 @@ services:
       context: ./home-ui
       dockerfile: Containerfile
     ports:
-      - '127.0.0.1:3001:3000'
+      - '127.0.0.1:7003:3000'
     healthcheck:
       test: ['CMD', 'wget', '-q', '--spider', 'http://localhost:3000/']
       interval: 5s
@@ -242,7 +243,7 @@ services:
   caddy:
     image: docker.io/caddy:2-alpine
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:7001:8000"
     volumes:
       - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
     restart: unless-stopped
