@@ -25,7 +25,7 @@ Usage:
   go run ./cmd/rep-build [flags] <ecosystem>/<identifier>/<version>
 
 Example:
-  go run ./cmd/rep-build npmjs/typescript/5.9.3
+  go run ./cmd/rep-build npm/typescript/5.9.3
 
 Flags:`
 
@@ -48,7 +48,7 @@ type registerRequest struct {
 
 func main() {
 	var (
-		apiURL    = flag.String("api", "http://localhost:8081", "Internal API base URL")
+		apiURL    = flag.String("api", "http://localhost:20001", "Internal API base URL")
 		configDir = flag.String("config-dir", "./cmd/rep-build", "Directory containing build configs and templates")
 		keep      = flag.Bool("keep", false, "Skip cleanup (for debugging)")
 	)
