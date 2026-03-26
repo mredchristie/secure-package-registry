@@ -209,7 +209,7 @@ func HandleCollection(
 	created, err := gh.TriggerWorkflow(ctx, workflowFile, map[string]string{
 		"package":  req.Identifier,
 		"version":  req.Version,
-		"registry": "gitea",
+		"registry": "npm",
 	})
 	if err != nil {
 		return nil, fmt.Errorf("triggering workflow: %w", err)
