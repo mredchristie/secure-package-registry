@@ -1,0 +1,29 @@
+FROM node:24-alpine
+
+RUN apk add --no-cache git
+
+WORKDIR /app
+
+RUN git init && \
+    git remote add origin https://github.com/prettier/prettier.git && \
+    git fetch --depth 1 origin 90983f40dce5e20beea4e5618b5e0426a6a7f4f0 && \
+    git checkout FETCH_HEAD
+
+RUN yarn install --immutable
+
+RUN yarn build
+
+# Remove scripts field from package.json to match official package
+RUN node -e " \
+    const fs = require('fs'); \
+    const p = JSON.parse(fs.readFileSync('dist/prettier/package.json')); \
+    delete p.scripts; \
+    fs.writeFileSync('dist/prettier/package.json', JSON.stringify(p, null, 2)); \
+    "
+
+# Fix permissions to match the official published package
+RUN chmod -x dist/prettier/bin/prettier.cjs
+
+RUN mkdir -p /out && cd dist/prettier && npm pack --pack-destination /out
+
+CMD ["sh", "-c", "ls /out/*.tgz"]

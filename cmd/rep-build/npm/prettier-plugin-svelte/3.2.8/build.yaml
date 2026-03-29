@@ -1,0 +1,3 @@
+template: npm
+repo_url: https://github.com/sveltejs/prettier-plugin-svelte.git
+commit_sha: c49666618cf11c38517f3241c139ab05a30332ea
