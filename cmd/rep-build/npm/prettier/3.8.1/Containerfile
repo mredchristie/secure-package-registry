@@ -18,7 +18,7 @@ RUN node -e " \
     const fs = require('fs'); \
     const p = JSON.parse(fs.readFileSync('dist/prettier/package.json')); \
     delete p.scripts; \
-    fs.writeFileSync('dist/prettier/package.json', JSON.stringify(p, null, 2)); \
+    fs.writeFileSync('dist/prettier/package.json', JSON.stringify(p, null, 4)); \
     "
 
 # Fix permissions to match the official published package
