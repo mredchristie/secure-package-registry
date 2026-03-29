@@ -16,7 +16,7 @@ RUN npm run build
 
 RUN mkdir -p /out && \
 {{- if index . "githead_injection" }}
-    node -e "const p=require('./package.json'); p.gitHead='{{ .commit_sha }}'; require('fs').writeFileSync('package.json', JSON.stringify(p, null, {{ index . "tab_size" | default "4" }}) + '\n')" && \
+    node -e "const p=require('./package.json'); p.gitHead='{{ .commit_sha }}'; require('fs').writeFileSync('package.json', JSON.stringify(p, null, 4) + '\n')" && \
 {{- end }}
     npm pack --pack-destination /out
 
