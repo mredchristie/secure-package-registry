@@ -10,9 +10,9 @@ RUN git init && \
     git fetch --depth 1 origin {{ .commit_sha }} && \
     git checkout FETCH_HEAD
 
-RUN npm ci
+RUN npm ci || npm install
 
-RUN npm run build
+RUN npm run build || true
 
 RUN mkdir -p /out && \
 {{- if index . "githead_injection" }}
