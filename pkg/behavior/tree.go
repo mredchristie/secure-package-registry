@@ -69,6 +69,16 @@ type ProcessTree struct {
 	Root *ProcessNode `json:"root"`
 }
 
+// IsEmpty returns true if the tree contains no behavioral events.
+// After Dedupe + pruneEmpty, a clean tree has a root with empty behaviors
+// and no remaining children.
+func (t *ProcessTree) IsEmpty() bool {
+	if t.Root == nil {
+		return true
+	}
+	return t.Root.Behaviors.IsEmpty() && len(t.Root.Children) == 0
+}
+
 // DefaultFileIgnorePrefixes are file path prefixes that produce
 // non-deterministic noise across runs (cache hashes, timestamps, etc.)
 // and carry no meaningful behavioral signal.
