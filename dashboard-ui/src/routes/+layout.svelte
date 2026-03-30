@@ -24,7 +24,7 @@
 </svelte:head>
 
 <div class="app" class:dark={isDark}>
-  <Header {isDark} onToggleTheme={toggleTheme} isLoggedIn={data.isLoggedIn} />
+  <Header {isDark} onToggleTheme={toggleTheme} user={data.user} />
   <!-- Header component with theme toggle (appears on all pages) -->
   {@render children()}
   <!-- Page content rendered here via {@render children()} -->

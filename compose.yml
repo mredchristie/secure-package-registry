@@ -224,9 +224,20 @@ services:
       dockerfile: Containerfile
       args:
         PUBLIC_HOME_BASE_URL: ${PUBLIC_HOME_BASE_URL:-http://localhost:7003}
+    depends_on:
+      core_db:
+        condition: service_healthy
     environment:
       - PORT=3000
       - HOST=0.0.0.0
+      - BETTER_AUTH_URL=${BETTER_AUTH_URL}
+      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
+      - TRUSTED_ORIGINS=${TRUSTED_ORIGINS}
+      - POSTGRES_HOST=core_db
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=core
     restart: unless-stopped
 
   home-ui:
@@ -237,6 +248,13 @@ services:
         PUBLIC_DASHBOARD_BASE_URL: ${PUBLIC_DASHBOARD_BASE_URL:-http://localhost:7001}
     ports:
       - '127.0.0.1:7003:3000'
+    depends_on:
+      dashboard-ui:
+        condition: service_started
+    environment:
+      - PORT=3000
+      - HOST=0.0.0.0
+      - DASHBOARD_INTERNAL_URL=http://dashboard-ui:3000
     healthcheck:
       test: ['CMD', 'wget', '-q', '--spider', 'http://localhost:3000/']
       interval: 5s
