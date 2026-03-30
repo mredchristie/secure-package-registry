@@ -1,21 +1,6 @@
 <script lang="ts">
   import { searchAPI } from "$lib/api";
-  import type {
-    PackageSummary,
-    PackageVersionDetail,
-    Ecosystem,
-  } from "$lib/types/api";
-
-  function decodeTagValue(data: string): string {
-    try {
-      const parsed = JSON.parse(atob(data));
-      if (parsed === null) return "null";
-      if (typeof parsed === "object") return JSON.stringify(parsed);
-      return String(parsed);
-    } catch {
-      return data;
-    }
-  }
+  import type { PackageSummary, Ecosystem } from "$lib/types/api";
 
   function trustColor(score: number): string {
     if (score >= 90) return "trust-high";
@@ -23,17 +8,9 @@
     return "trust-low";
   }
 
-  const ecosystemColors: Record<Ecosystem, string> = {
-    npm: "eco-npm",
-    go: "eco-go",
-    cargo: "eco-cargo",
-    pypi: "eco-pypi",
-  };
-
   let searchQuery = $state("");
   let selectedEcosystem = $state<"" | Ecosystem>("");
   let searchResults = $state<PackageSummary[]>([]);
-  let selectedPackage = $state<PackageVersionDetail | null>(null);
   let loading = $state(false);
   let error = $state("");
   let hasSearched = $state(false);
@@ -46,32 +23,33 @@
     { label: "PyPI", value: "pypi" as const },
   ];
 
-  let filteredResults = $derived(
-    searchResults.filter((p) => {
-      const q = searchQuery.trim().toLowerCase();
+  const filteredResults = $derived(
+    searchResults.filter((pkg) => {
+      const query = searchQuery.trim().toLowerCase();
 
       const matchesQuery =
-        !q ||
-        p.identifier.toLowerCase().includes(q) ||
-        (p.description ?? "").toLowerCase().includes(q) ||
-        (p.tags ?? []).some((t) => t.toLowerCase().includes(q));
+        !query ||
+        pkg.identifier.toLowerCase().includes(query) ||
+        (pkg.description ?? "").toLowerCase().includes(query) ||
+        (pkg.tags ?? []).some((tag) => tag.toLowerCase().includes(query));
 
-      const matchesEco =
-        !selectedEcosystem || p.ecosystem === selectedEcosystem;
+      const matchesEcosystem =
+        !selectedEcosystem || pkg.ecosystem === selectedEcosystem;
 
-      return matchesQuery && matchesEco;
+      return matchesQuery && matchesEcosystem;
     }),
   );
 
   async function searchPackages() {
-    if (!searchQuery.trim()) {
-      error = "Please enter a search term.";
+    if (!searchQuery.trim() && !selectedEcosystem) {
+      error = "Please enter a search term or select an ecosystem.";
+      hasSearched = false;
+      searchResults = [];
       return;
     }
 
     loading = true;
     error = "";
-    selectedPackage = null;
     hasSearched = true;
 
     try {
@@ -79,6 +57,7 @@
         searchQuery.trim(),
         selectedEcosystem || undefined,
       );
+
       searchResults = data.items ?? [];
     } catch {
       error = "Failed to search packages. Please try again.";
@@ -88,30 +67,10 @@
     }
   }
 
-  async function selectPackage(pkg: PackageSummary) {
-    loading = true;
-    error = "";
-
-    try {
-      selectedPackage = await searchAPI.getVersion(
-        pkg.ecosystem,
-        pkg.identifier,
-        pkg.latest_version,
-      );
-    } catch {
-      error = "Failed to fetch package details.";
-      selectedPackage = null;
-    } finally {
-      loading = false;
-    }
-  }
-
-  function clearSelection() {
-    selectedPackage = null;
-  }
-
   function handleKeydown(event: KeyboardEvent) {
-    if (event.key === "Enter") searchPackages();
+    if (event.key === "Enter") {
+      searchPackages();
+    }
   }
 </script>
 
@@ -120,135 +79,55 @@
     <div class="error-banner">{error}</div>
   {/if}
 
-  {#if selectedPackage}
-    <!-- Detail View -->
-    <div class="card">
-      <button onclick={clearSelection} class="back-button">
-        ← Back to results
+  <div class="search-card">
+    <div class="search-row">
+      <input
+        type="text"
+        bind:value={searchQuery}
+        on:keydown={handleKeydown}
+        placeholder="Search packages…"
+        class="search-input"
+      />
+
+      <select bind:value={selectedEcosystem} class="eco-select">
+        {#each ecosystems as ecosystem}
+          <option value={ecosystem.value}>{ecosystem.label}</option>
+        {/each}
+      </select>
+
+      <button on:click={searchPackages} disabled={loading} class="btn-search">
+        {loading ? "Searching…" : "Search"}
       </button>
 
-      <div class="detail-header">
-        <div>
-          <h2>{selectedPackage.identifier}</h2>
-          <span
-            class="eco-badge {ecosystemColors[
-              selectedPackage.ecosystem as Ecosystem
-            ] ?? 'eco-npm'}"
+      <button class="btn-add" type="button">+ Add Package</button>
+    </div>
+
+    {#if hasSearched && !loading}
+      <div class="results-meta">
+        {filteredResults.length} package{filteredResults.length !== 1
+          ? "s"
+          : ""} found
+      </div>
+    {/if}
+  </div>
+
+  {#if loading}
+    <div class="state-msg">Searching…</div>
+  {:else if hasSearched && filteredResults.length === 0}
+    <div class="state-msg">No packages matched your query.</div>
+  {:else if filteredResults.length > 0}
+    <ul class="cards">
+      {#each filteredResults as pkg}
+        <li>
+          <a
+            class="card-link"
+            href={`/detail-page/${encodeURIComponent(pkg.identifier)}?ecosystem=${pkg.ecosystem}&version=${pkg.latest_version}`}
           >
-            {selectedPackage.ecosystem}
-          </span>
-        </div>
-
-        <div class="trust-circle {trustColor(selectedPackage.trust_level)}">
-          <span class="trust-score">{selectedPackage.trust_level}</span>
-          <span class="trust-label">Trust</span>
-        </div>
-      </div>
-
-      <div class="detail-grid">
-        <div class="detail-item">
-          <div class="detail-label">Version</div>
-          <div class="detail-value">
-            {selectedPackage.version}
-            {#if selectedPackage.latest}
-              <span class="badge-latest">Latest</span>
-            {/if}
-          </div>
-        </div>
-
-        <div class="detail-item">
-          <div class="detail-label">Trust Level</div>
-          <div class="detail-value">{selectedPackage.trust_level} / 100</div>
-        </div>
-
-        <div class="detail-item">
-          <div class="detail-label">Source Tag</div>
-          <div class="detail-value mono">{selectedPackage.source.tag}</div>
-        </div>
-
-        <div class="detail-item">
-          <div class="detail-label">Commit</div>
-          <div class="detail-value mono">{selectedPackage.source.commit}</div>
-        </div>
-
-        {#if selectedPackage.maintainer_notes}
-          <div class="detail-item full-width">
-            <div class="detail-label">Maintainer Notes</div>
-            <p class="notes">{selectedPackage.maintainer_notes}</p>
-          </div>
-        {/if}
-
-        {#if selectedPackage.tags?.length}
-          <div class="detail-item full-width">
-            <div class="detail-label">Tags</div>
-            <div class="tags-list">
-              {#each selectedPackage.tags as tag}
-                <div class="tag-item">
-                  <span class="tag-label">{tag.label}</span>
-                  <span class="tag-value">{decodeTagValue(tag.data)}</span>
-                </div>
-              {/each}
-            </div>
-          </div>
-        {/if}
-      </div>
-    </div>
-  {:else}
-    <!-- Search View -->
-    <div class="card search-card">
-      <div class="search-row">
-        <input
-          type="text"
-          bind:value={searchQuery}
-          onkeydown={handleKeydown}
-          placeholder="Search packages..."
-          class="search-input"
-        />
-
-        <select bind:value={selectedEcosystem} class="ecosystem-select">
-          {#each ecosystems as eco}
-            <option value={eco.value}>{eco.label}</option>
-          {/each}
-        </select>
-
-        <button
-          onclick={searchPackages}
-          disabled={loading}
-          class="search-button"
-        >
-          {loading ? "Searching..." : "Search"}
-        </button>
-      </div>
-
-      {#if hasSearched && !loading}
-        <div class="result-count">
-          {searchResults.length} package{searchResults.length !== 1 ? "s" : ""} found
-        </div>
-      {/if}
-    </div>
-
-    {#if loading}
-      <div class="status-message">Searching...</div>
-    {:else if hasSearched && searchResults.length === 0}
-      <div class="status-message">No packages matched your query.</div>
-    {:else if searchResults.length > 0}
-      <ul class="results-list">
-        {#each filteredResults as pkg}
-          <li>
-            <button
-              class="result-card"
-              onclick={() => selectPackage(pkg)}
-              type="button"
-            >
-              <div class="result-top">
-                <div class="result-name-row">
-                  <span class="result-name">{pkg.identifier}</span>
-                  <span
-                    class="eco-badge {ecosystemColors[pkg.ecosystem] ??
-                      'eco-npm'}"
-                  >
-                    {pkg.ecosystem}
-                  </span>
+            <article class="card">
+              <div class="card-header">
+                <div class="card-id-row">
+                  <span class="card-identifier">{pkg.identifier}</span>
+                  <span class="eco-badge {pkg.ecosystem}">{pkg.ecosystem}</span>
                 </div>
 
                 <span class="trust-pill {trustColor(pkg.trustScore ?? 0)}">
@@ -262,29 +141,32 @@
 
               {#if pkg.tags?.length}
                 <div class="result-tags">
-                  {#each pkg.tags as t}
-                    <span class="result-tag">{t}</span>
+                  {#each pkg.tags as tag}
+                    <span class="result-tag">{tag}</span>
                   {/each}
                 </div>
               {/if}
 
               <div class="result-meta">
                 <span>v{pkg.latest_version}</span>
+
                 {#if pkg.author}
                   <span>{pkg.author}</span>
                 {/if}
+
                 {#if pkg.updatedAgo}
                   <span>{pkg.updatedAgo}</span>
                 {/if}
+
                 {#if pkg.tier}
                   <span class="result-tier">{pkg.tier}</span>
                 {/if}
               </div>
-            </button>
-          </li>
-        {/each}
-      </ul>
-    {/if}
+            </article>
+          </a>
+        </li>
+      {/each}
+    </ul>
   {/if}
 </main>
 
@@ -295,7 +177,6 @@
     padding: 1.5rem 1.25rem 4rem;
   }
 
-  /* Error banner */
   .error-banner {
     margin-bottom: 1rem;
     padding: 1rem;
@@ -305,27 +186,19 @@
     color: #dc2626;
   }
 
-  /* Card base */
-  .card {
-    border-radius: 14px;
-    border: 1px solid var(--card-border);
-    background: var(--card-bg);
-    padding: 1.5rem;
-  }
-
-  /* Search form */
   .search-card {
     margin-bottom: 1rem;
   }
 
   .search-row {
     display: grid;
-    grid-template-columns: 1fr 180px auto;
+    grid-template-columns: 1fr 180px auto auto;
     gap: 0.625rem;
     align-items: center;
   }
 
-  .search-input {
+  .search-input,
+  .eco-select {
     padding: 0.625rem 0.875rem;
     font-size: 0.93rem;
     border-radius: 10px;
@@ -340,111 +213,101 @@
     color: var(--text-secondary);
   }
 
-  .search-input:focus {
+  .search-input:focus,
+  .eco-select:focus {
     border-color: var(--accent);
   }
 
-  .ecosystem-select {
-    padding: 0.625rem 0.875rem;
-    font-size: 0.93rem;
-    border-radius: 10px;
-    border: 1px solid var(--border);
-    background: var(--bg-secondary);
-    color: var(--text-primary);
-    outline: none;
-    cursor: pointer;
-    appearance: auto;
-  }
-
-  .ecosystem-select:focus {
-    border-color: var(--accent);
-  }
-
-  .search-button {
+  .btn-search,
+  .btn-add {
     padding: 0.625rem 1rem;
-    font-size: 0.875rem;
+    font-size: 0.9rem;
     font-weight: 700;
-    white-space: nowrap;
     border-radius: 10px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .btn-search {
     border: 1px solid var(--accent);
     background: var(--accent);
-    color: #fff;
-    cursor: pointer;
-    transition:
-      background 0.2s,
-      border-color 0.2s;
+    color: white;
   }
 
-  .search-button:hover:not(:disabled) {
+  .btn-search:hover:not(:disabled) {
     background: var(--accent-hover);
     border-color: var(--accent-hover);
   }
 
-  .search-button:disabled {
+  .btn-search:disabled {
     opacity: 0.55;
     cursor: not-allowed;
   }
 
-  .result-count {
+  .btn-add {
+    border: 1px solid var(--accent);
+    background: transparent;
+    color: var(--accent);
+  }
+
+  .btn-add:hover {
+    background: rgba(29, 78, 216, 0.08);
+  }
+
+  .results-meta {
     margin-top: 0.75rem;
-    font-size: 0.875rem;
+    font-size: 0.88rem;
+    color: var(--text-secondary);
     font-weight: 600;
-    color: var(--text-secondary);
   }
 
-  .status-message {
-    padding: 3rem 0;
+  .state-msg {
     text-align: center;
-    font-size: 0.875rem;
     color: var(--text-secondary);
+    padding: 3rem 0;
+    font-size: 0.95rem;
   }
 
-  /* Results list */
-  .results-list {
+  .cards {
     list-style: none;
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
     padding: 0;
+    margin: 0;
   }
 
-  .result-card {
+  .card-link {
     display: block;
-    width: 100%;
-    text-align: left;
-    padding: 1rem;
-    border-radius: 12px;
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .card {
+    border-radius: 14px;
     border: 1px solid var(--card-border);
     background: var(--card-bg);
-    cursor: pointer;
-    transition:
-      transform 0.15s,
-      border-color 0.15s;
+    padding: 1.5rem;
   }
 
-  .result-card:hover {
-    transform: translateY(-1px);
-    border-color: rgba(29, 78, 216, 0.35);
-  }
-
-  .result-top {
+  .card-header {
     display: flex;
-    align-items: center;
     justify-content: space-between;
+    align-items: center;
     gap: 0.75rem;
-    margin-bottom: 0.25rem;
+    margin-bottom: 0.5rem;
   }
 
-  .result-name-row {
+  .card-id-row {
     display: flex;
     align-items: center;
-    gap: 0.625rem;
+    gap: 0.6rem;
     min-width: 0;
   }
 
-  .result-name {
-    font-size: 1.05rem;
+  .card-identifier {
     font-weight: 800;
+    font-size: 1.05rem;
     color: var(--text-primary);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -492,7 +355,6 @@
     color: var(--accent);
   }
 
-  /* Ecosystem badges */
   .eco-badge {
     display: inline-block;
     padding: 0.125rem 0.5rem;
@@ -505,64 +367,40 @@
     flex-shrink: 0;
   }
 
-  .eco-npm {
+  .eco-badge.npm {
     border-color: rgba(252, 165, 165, 0.4);
     color: #b91c1c;
     background: #fef2f2;
   }
 
-  .eco-go {
+  .eco-badge.go {
     border-color: rgba(103, 232, 249, 0.4);
     color: #0e7490;
     background: #ecfeff;
   }
 
-  .eco-cargo {
+  .eco-badge.cargo {
     border-color: rgba(253, 186, 116, 0.4);
     color: #c2410c;
     background: #fff7ed;
   }
 
-  .eco-pypi {
+  .eco-badge.pypi {
     border-color: rgba(147, 197, 253, 0.4);
     color: #1d4ed8;
     background: #eff6ff;
   }
 
-  /* Trust indicators */
   .trust-pill {
     flex-shrink: 0;
+    min-width: 2.8rem;
     padding: 0.125rem 0.625rem;
     font-size: 0.875rem;
     font-weight: 800;
     border-radius: 999px;
     border: 1.5px solid;
     text-align: center;
-  }
-
-  .trust-circle {
-    flex-shrink: 0;
-    width: 68px;
-    height: 68px;
-    border-radius: 50%;
-    border: 3px solid;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .trust-score {
-    font-size: 1.125rem;
-    font-weight: 900;
-    line-height: 1;
-  }
-
-  .trust-label {
-    font-size: 0.65rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    color: var(--text-secondary);
+    background: transparent;
   }
 
   .trust-high {
@@ -580,133 +418,9 @@
     border-color: #ef4444;
   }
 
-  /* Detail view */
-  .back-button {
-    border: none;
-    background: transparent;
-    font-size: 0.875rem;
-    font-weight: 700;
-    color: var(--accent);
-    cursor: pointer;
-    padding: 0;
-    margin-bottom: 1rem;
-  }
-
-  .back-button:hover {
-    text-decoration: underline;
-  }
-
-  .detail-header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 1rem;
-    margin-bottom: 1.25rem;
-  }
-
-  .detail-header h2 {
-    font-size: 1.5rem;
-    font-weight: 900;
-    color: var(--text-primary);
-    margin-bottom: 0.25rem;
-  }
-
-  .detail-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0.75rem;
-  }
-
-  .detail-item {
-    padding: 0.75rem;
-    border-radius: 10px;
-    border: 1px solid var(--border);
-    background: var(--bg-secondary);
-  }
-
-  .detail-item.full-width {
-    grid-column: span 2;
-  }
-
-  .detail-label {
-    margin-bottom: 0.25rem;
-    font-size: 0.7rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--text-secondary);
-  }
-
-  .detail-value {
-    font-weight: 600;
-    color: var(--text-primary);
-  }
-
-  .mono {
-    font-family:
-      ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 0.875rem;
-  }
-
-  .badge-latest {
-    display: inline-block;
-    margin-left: 0.25rem;
-    padding: 0.125rem 0.375rem;
-    font-size: 0.72rem;
-    font-weight: 800;
-    border-radius: 6px;
-    background: #16a34a;
-    color: #fff;
-    vertical-align: middle;
-  }
-
-  .notes {
-    margin: 0;
-    font-size: 0.875rem;
-    line-height: 1.625;
-    color: var(--text-primary);
-  }
-
-  .tags-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-  }
-
-  .tag-item {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.25rem 0.625rem;
-    border-radius: 8px;
-    border: 1px solid var(--border);
-    background: var(--bg-primary);
-  }
-
-  .tag-label {
-    font-size: 0.875rem;
-    font-weight: 800;
-    color: var(--accent);
-  }
-
-  .tag-value {
-    font-size: 0.875rem;
-    font-weight: 600;
-    color: var(--text-secondary);
-  }
-
-  /* Responsive */
   @media (max-width: 640px) {
     .search-row {
       grid-template-columns: 1fr;
-    }
-
-    .detail-grid {
-      grid-template-columns: 1fr;
-    }
-
-    .detail-item.full-width {
-      grid-column: span 1;
     }
   }
 </style>
