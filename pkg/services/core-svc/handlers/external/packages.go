@@ -28,13 +28,9 @@ func NewPackageHandler(db *pkgdb.Client) http.Handler {
 }
 
 // Search handles package search requests.
+// q is optional - if empty, returns all packages (paginated).
 func (h *PackageHandler) Search(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query().Get("q")
-	if query == "" {
-		render.Status(r, http.StatusBadRequest)
-		render.JSON(w, r, map[string]string{"error": "missing required parameter: q"})
-		return
-	}
 
 	// Parse optional ecosystem filter
 	var ecosystem *pkgdb.Ecosystem

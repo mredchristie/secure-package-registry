@@ -17,7 +17,7 @@
 		<a href="{PUBLIC_DASHBOARD_BASE_URL}/pricing" class="nav-link">Pricing</a>
 	</div>
 	<div class="header-right">
-		<button class="theme-toggle" on:click={onToggleTheme}>
+		<button class="theme-toggle" onclick={onToggleTheme}>
 			{isDark ? 'Light' : 'Dark'}
 		</button>
 		<a href="{PUBLIC_DASHBOARD_BASE_URL}/" class="navbar-button"> Get Started </a>

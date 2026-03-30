@@ -1,6 +1,8 @@
 <script lang="ts">
   import { searchAPI } from "$lib/api";
   import type { PackageSummary, Ecosystem } from "$lib/types/api";
+  import { page } from "$app/state";
+  import { onMount } from "svelte";
 
   function trustColor(score: number): string {
     if (score >= 90) return "trust-high";
@@ -8,8 +10,13 @@
     return "trust-low";
   }
 
-  let searchQuery = $state("");
-  let selectedEcosystem = $state<"" | Ecosystem>("");
+  // Initialize from URL params
+  const initialQ = page.url.searchParams.get("q") ?? "";
+  const initialEcosystem =
+    (page.url.searchParams.get("ecosystem") as Ecosystem | "") ?? "";
+
+  let searchQuery = $state(initialQ);
+  let selectedEcosystem = $state<"" | Ecosystem>(initialEcosystem);
   let searchResults = $state<PackageSummary[]>([]);
   let loading = $state(false);
   let error = $state("");
@@ -40,17 +47,23 @@
     }),
   );
 
-  async function searchPackages() {
-    if (!searchQuery.trim() && !selectedEcosystem) {
-      error = "Please enter a search term or select an ecosystem.";
-      hasSearched = false;
-      searchResults = [];
-      return;
-    }
+  // Update URL with current search state
+  function updateUrlParams() {
+    const params = new URLSearchParams();
+    if (searchQuery.trim()) params.set("q", searchQuery.trim());
+    if (selectedEcosystem) params.set("ecosystem", selectedEcosystem);
 
+    const newUrl = `${window.location.pathname}${params.toString() ? "?" + params.toString() : ""}`;
+    window.history.replaceState({}, "", newUrl);
+  }
+
+  async function searchPackages() {
     loading = true;
     error = "";
     hasSearched = true;
+
+    // Update URL when search is performed
+    updateUrlParams();
 
     try {
       const data = await searchAPI.search(
@@ -72,6 +85,13 @@
       searchPackages();
     }
   }
+
+  // Auto-search on mount if URL has query params
+  onMount(() => {
+    if (initialQ || initialEcosystem) {
+      searchPackages();
+    }
+  });
 </script>
 
 <main>
