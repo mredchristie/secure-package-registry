@@ -990,6 +990,8 @@
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
+    max-height: 12rem;
+    overflow-y: auto;
   }
 
   .detail-mono {
@@ -1025,9 +1027,6 @@
   }
 
   .file-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.125rem;
     max-height: 12rem;
     overflow-y: auto;
   }
@@ -1036,6 +1035,7 @@
     font-family:
       ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     font-size: 0.75rem;
+    line-height: 1.25rem;
     color: var(--text-secondary);
     overflow: hidden;
     text-overflow: ellipsis;
