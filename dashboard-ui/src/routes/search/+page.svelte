@@ -84,7 +84,7 @@
       <input
         type="text"
         bind:value={searchQuery}
-        on:keydown={handleKeydown}
+        onkeydown={handleKeydown}
         placeholder="Search packages…"
         class="search-input"
       />
@@ -95,7 +95,7 @@
         {/each}
       </select>
 
-      <button on:click={searchPackages} disabled={loading} class="btn-search">
+      <button onclick={searchPackages} disabled={loading} class="btn-search">
         {loading ? "Searching…" : "Search"}
       </button>
 

@@ -2,74 +2,193 @@
   import { goto } from "$app/navigation";
   import { authClient } from "$lib/client";
 
-  let email = $state("");
-  let password = $state("");
-  let error = $state("");
-  let loading = $state(false);
+  let activeTab: "login" | "register" = $state("login");
 
-  async function handleSubmit(e: Event) {
+  // Login state
+  let loginEmail = $state("");
+  let loginPassword = $state("");
+  let loginError = $state("");
+  let loginLoading = $state(false);
+
+  // Register state
+  let name = $state("");
+  let registerEmail = $state("");
+  let registerPassword = $state("");
+  let registerError = $state("");
+  let registerLoading = $state(false);
+
+  async function handleLogin(e: Event) {
     e.preventDefault();
-    error = "";
-    loading = true;
+    loginError = "";
+    loginLoading = true;
 
     const { error: authError } = await authClient.signIn.email({
-      email,
-      password,
+      email: loginEmail,
+      password: loginPassword,
     });
 
     if (authError) {
-      error = authError.message ?? "Sign in failed. Please try again.";
-      loading = false;
+      loginError = authError.message ?? "Sign in failed";
+      loginLoading = false;
       return;
     }
 
     await goto("/", { invalidateAll: true });
   }
+
+  async function handleRegister(e: Event) {
+    e.preventDefault();
+    registerError = "";
+    registerLoading = true;
+
+    const { error: authError } = await authClient.signUp.email({
+      name,
+      email: registerEmail,
+      password: registerPassword,
+    });
+
+    if (authError) {
+      registerError = authError.message ?? "Sign up failed";
+      registerLoading = false;
+      return;
+    }
+
+    // Auto-login after successful registration
+    const { error: loginErr } = await authClient.signIn.email({
+      email: registerEmail,
+      password: registerPassword,
+    });
+
+    if (loginErr) {
+      // If auto-login fails, switch to login tab
+      activeTab = "login";
+      loginEmail = registerEmail;
+      loginError = "Account created! Please sign in.";
+    } else {
+      await goto("/", { invalidateAll: true });
+    }
+    registerLoading = false;
+  }
 </script>
 
 <main>
   <div class="auth-card">
-    <h1 class="auth-title">Log In</h1>
-    <p class="auth-subtitle">Sign in to your SPR account</p>
-
-    {#if error}
-      <div class="alert alert-error">{error}</div>
-    {/if}
-
-    <form onsubmit={handleSubmit}>
-      <div class="form-field">
-        <label class="form-label" for="email">Email</label>
-        <input
-          id="email"
-          type="email"
-          bind:value={email}
-          placeholder="you@example.com"
-          required
-          class="form-input"
-        />
-      </div>
-
-      <div class="form-field">
-        <label class="form-label" for="password">Password</label>
-        <input
-          id="password"
-          type="password"
-          bind:value={password}
-          placeholder="Your password"
-          required
-          minlength="8"
-          class="form-input"
-        />
-      </div>
-
-      <button type="submit" disabled={loading} class="btn-primary">
-        {loading ? "Signing in..." : "Log In"}
+    <div class="tab-bar">
+      <button
+        class="tab-btn"
+        class:active={activeTab === "login"}
+        onclick={() => (activeTab = "login")}
+      >
+        Sign In
       </button>
-    </form>
+      <button
+        class="tab-btn"
+        class:active={activeTab === "register"}
+        onclick={() => (activeTab = "register")}
+      >
+        Create Account
+      </button>
+    </div>
 
-    <p class="auth-footer">
-      Don't have an account? <a href="/signup">Sign up</a>
-    </p>
+    {#if activeTab === "login"}
+      <div class="form-section">
+        <h1>Welcome back</h1>
+        <p class="subtitle">Sign in to your SPR account</p>
+
+        {#if loginError}
+          <div
+            class="alert"
+            class:alert-success={loginError.includes("created")}
+            class:alert-error={!loginError.includes("created")}
+          >
+            {loginError}
+          </div>
+        {/if}
+
+        <form onsubmit={handleLogin}>
+          <div class="form-field">
+            <label class="form-label" for="login-email">Email</label>
+            <input
+              id="login-email"
+              type="email"
+              bind:value={loginEmail}
+              placeholder="you@example.com"
+              required
+              class="form-input"
+            />
+          </div>
+
+          <div class="form-field">
+            <label class="form-label" for="login-password">Password</label>
+            <input
+              id="login-password"
+              type="password"
+              bind:value={loginPassword}
+              placeholder="Your password"
+              required
+              minlength="8"
+              class="form-input"
+            />
+          </div>
+
+          <button type="submit" class="btn-primary" disabled={loginLoading}>
+            {loginLoading ? "Signing in..." : "Sign In"}
+          </button>
+        </form>
+      </div>
+    {:else}
+      <div class="form-section">
+        <h1>Create account</h1>
+        <p class="subtitle">Get started with secure package verification</p>
+
+        {#if registerError}
+          <div class="alert alert-error">{registerError}</div>
+        {/if}
+
+        <form onsubmit={handleRegister}>
+          <div class="form-field">
+            <label class="form-label" for="name">Name</label>
+            <input
+              id="name"
+              type="text"
+              bind:value={name}
+              placeholder="Your name"
+              required
+              class="form-input"
+            />
+          </div>
+
+          <div class="form-field">
+            <label class="form-label" for="register-email">Email</label>
+            <input
+              id="register-email"
+              type="email"
+              bind:value={registerEmail}
+              placeholder="you@example.com"
+              required
+              class="form-input"
+            />
+          </div>
+
+          <div class="form-field">
+            <label class="form-label" for="register-password">Password</label>
+            <input
+              id="register-password"
+              type="password"
+              bind:value={registerPassword}
+              placeholder="At least 8 characters"
+              required
+              minlength="8"
+              class="form-input"
+            />
+          </div>
+
+          <button type="submit" class="btn-primary" disabled={registerLoading}>
+            {registerLoading ? "Creating account..." : "Create Account"}
+          </button>
+        </form>
+      </div>
+    {/if}
   </div>
 </main>
 
@@ -88,17 +207,49 @@
     border-radius: 12px;
     border: 1px solid var(--card-border);
     background: var(--card-bg);
-    padding: 2rem;
+    overflow: hidden;
   }
 
-  .auth-title {
+  .tab-bar {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .tab-btn {
+    flex: 1;
+    padding: 1rem;
+    background: none;
+    border: none;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .tab-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-secondary);
+  }
+
+  .tab-btn.active {
+    color: var(--accent);
+    border-bottom: 2px solid var(--accent);
+    margin-bottom: -1px;
+  }
+
+  .form-section {
+    padding: 1.5rem 2rem 2rem;
+  }
+
+  h1 {
     font-size: 1.5rem;
     font-weight: 700;
     color: var(--text-primary);
     margin-bottom: 0.25rem;
   }
 
-  .auth-subtitle {
+  .subtitle {
     font-size: 0.875rem;
     color: var(--text-secondary);
     margin-bottom: 1.5rem;
@@ -175,20 +326,9 @@
     color: #dc2626;
   }
 
-  .auth-footer {
-    text-align: center;
-    font-size: 0.875rem;
-    color: var(--text-secondary);
-    margin-top: 1.5rem;
-  }
-
-  .auth-footer a {
-    color: var(--accent);
-    text-decoration: none;
-    font-weight: 500;
-  }
-
-  .auth-footer a:hover {
-    text-decoration: underline;
+  .alert-success {
+    background: rgba(34, 197, 94, 0.08);
+    border: 1px solid rgba(34, 197, 94, 0.2);
+    color: #16a34a;
   }
 </style>

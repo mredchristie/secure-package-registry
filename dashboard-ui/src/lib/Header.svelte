@@ -17,14 +17,9 @@
     <div class="logo">
       <a class="clear-a-stylings" href="{PUBLIC_HOME_BASE_URL}/">SPR</a>
     </div>
-    <a href="{PUBLIC_HOME_BASE_URL}/docs" class="nav-link">Docs</a>
-    <a href="{PUBLIC_HOME_BASE_URL}/pricing" class="nav-link">Pricing</a>
   </div>
   <div class="header-middle">
-    <form class="search-bar" method="get" action="/search">
-      <input type="text" name="searchbar" placeholder="Search Packages..." />
-      <button type="submit" class="search-button"> Search </button>
-    </form>
+    <a href="/search" class="nav-link">Search</a>
   </div>
   {#if user}
     <div class="header-right">
@@ -32,7 +27,7 @@
         {isDark ? "Light" : "Dark"}
       </button>
       <a href="/profile" class="nav-link user-link">
-        {user.name || user.email}
+        {user.name || "User"}
       </a>
       <form method="POST" action="/logout" use:enhance>
         <button type="submit" class="navbar-button">Log Out</button>
@@ -43,8 +38,7 @@
       <button class="theme-toggle" onclick={onToggleTheme}>
         {isDark ? "Light" : "Dark"}
       </button>
-      <a href="/login" class="navbar-button">Log In</a>
-      <a href="/signup" class="navbar-button">Sign Up</a>
+      <a href="/login" class="navbar-button">Sign In</a>
     </div>
   {/if}
 </header>
@@ -60,51 +54,6 @@
     border-bottom: 1px solid var(--border);
     z-index: 100;
     backdrop-filter: blur(10px);
-  }
-
-  .search-button {
-    border-top-right-radius: 6px;
-    border-bottom-right-radius: 6px;
-    background: var(--accent);
-    color: var(--bg-primary);
-    text-decoration: none;
-    padding: 0.5rem 1.75rem;
-    font-size: 0.95rem;
-    font-weight: 500;
-    transition: background 0.2s;
-    font-size: 0.875rem;
-    font-weight: 500;
-    transition: color 0.3s;
-  }
-
-  .search-bar {
-    width: 100%;
-    display: flex;
-    justify-content: center;
-    margin-left: 2rem;
-    margin-right: 2rem;
-  }
-
-  .search-bar input {
-    padding: 0.5rem;
-    font-size: 0.95rem;
-    font-weight: 500;
-    transition: background 0.2s;
-    width: 75%;
-    color: var(--text-secondary);
-    background: var(--bg-primary);
-    accent-color: var(--text-secondary);
-    border-top-left-radius: 6px;
-    border-bottom-left-radius: 6px;
-    border-right: none;
-  }
-
-  .search-bar input::placeholder {
-    color: var(--text-secondary);
-  }
-
-  .search-bar input:focus {
-    outline: none;
   }
 
   .navbar-button {
