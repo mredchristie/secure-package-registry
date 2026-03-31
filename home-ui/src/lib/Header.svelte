@@ -1,19 +1,11 @@
 <script lang="ts">
+	// import { browser } from '$app/environment';
+	// import { isLoggedIn } from './utils/auth';
+
+	export let isDark = true;
+	export let onToggleTheme: () => void;
+
 	import { PUBLIC_DASHBOARD_BASE_URL } from '$env/static/public';
-
-	let {
-		isDark = true,
-		onToggleTheme,
-		user = null
-	}: {
-		isDark?: boolean;
-		onToggleTheme: () => void;
-		user: { name: string; email: string } | null;
-	} = $props();
-
-	function handleSignOut() {
-		window.location.href = `${PUBLIC_DASHBOARD_BASE_URL}/signout`;
-	}
 </script>
 
 <header>
@@ -25,15 +17,9 @@
 		<a href="{PUBLIC_DASHBOARD_BASE_URL}/pricing" class="nav-link">Pricing</a>
 	</div>
 	<div class="header-right">
-		<button class="theme-toggle" onclick={onToggleTheme}>
+		<button class="theme-toggle" on:click={onToggleTheme}>
 			{isDark ? 'Light' : 'Dark'}
 		</button>
-		{#if user}
-			<span class="user-name">{user.name}</span>
-			<button class="navbar-button" onclick={handleSignOut}>Sign Out</button>
-		{:else}
-			<a href="{PUBLIC_DASHBOARD_BASE_URL}/login" class="navbar-button">Sign In</a>
-		{/if}
 		<a href="{PUBLIC_DASHBOARD_BASE_URL}/" class="navbar-button"> Get Started </a>
 	</div>
 </header>
@@ -57,12 +43,12 @@
 		color: var(--bg-primary);
 		text-decoration: none;
 		padding: 0.5rem 1.75rem;
-		border: none;
 		border-radius: 6px;
+		font-size: 0.95rem;
+		font-weight: 500;
+		transition: background 0.2s;
 		font-size: 0.875rem;
 		font-weight: 500;
-		font-family: inherit;
-		cursor: pointer;
 		transition: color 0.3s;
 	}
 
@@ -108,11 +94,6 @@
 		font-weight: 500;
 		transition: color 0.3s;
 		cursor: pointer;
-	}
-
-	.user-name {
-		font-size: 0.875rem;
-		color: var(--text-secondary);
 	}
 
 	.nav-link {

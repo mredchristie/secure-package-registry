@@ -1,9 +1,15 @@
 import { apiKey } from "@better-auth/api-key";
 import { betterAuth } from "better-auth";
-import { admin, organization } from "better-auth/plugins";
+import { organization } from "better-auth/plugins";
 import { sveltekitCookies } from "better-auth/svelte-kit";
 import { Pool } from "pg";
 import { getRequestEvent } from "$app/server";
+
+// Parse TRUSTED_ORIGINS from environment variable
+// Format: comma-separated list of origins, e.g., "http://localhost:7001
+const trustedOrigins = process.env.TRUSTED_ORIGINS?.split(",")
+	.map((origin) => origin.trim())
+	.filter((origin) => origin.length > 0) ?? ["http://localhost:7001"];
 
 export const auth = betterAuth({
 	database: new Pool({
@@ -17,23 +23,14 @@ export const auth = betterAuth({
 	}),
 
 	emailAndPassword: {
-		autoSignIn: false,
 		enabled: true,
 	},
 
 	plugins: [
-		admin(),
 		organization(),
 		apiKey(),
 		sveltekitCookies(getRequestEvent), // make sure this is the last plugin in the array
 	],
 
-	trustedOrigins: process.env.TRUSTED_ORIGINS
-		? process.env.TRUSTED_ORIGINS.split(",")
-		: [
-				"http://localhost:8000",
-				"http://localhost:5174",
-				"http://localhost:5173",
-				"http://localhost:3001",
-			],
+	trustedOrigins,
 });

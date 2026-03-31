@@ -2,6 +2,7 @@
   import { goto } from "$app/navigation";
   import { authClient } from "$lib/client";
 
+  let name = $state("");
   let email = $state("");
   let password = $state("");
   let error = $state("");
@@ -12,13 +13,14 @@
     error = "";
     loading = true;
 
-    const { error: authError } = await authClient.signIn.email({
+    const { error: authError } = await authClient.signUp.email({
+      name,
       email,
       password,
     });
 
     if (authError) {
-      error = authError.message ?? "Sign in failed. Please try again.";
+      error = authError.message ?? "Sign up failed. Please try again.";
       loading = false;
       return;
     }
@@ -29,14 +31,26 @@
 
 <main>
   <div class="auth-card">
-    <h1 class="auth-title">Log In</h1>
-    <p class="auth-subtitle">Sign in to your SPR account</p>
+    <h1 class="auth-title">Sign Up</h1>
+    <p class="auth-subtitle">Create your SPR account</p>
 
     {#if error}
       <div class="alert alert-error">{error}</div>
     {/if}
 
     <form onsubmit={handleSubmit}>
+      <div class="form-field">
+        <label class="form-label" for="name">Name</label>
+        <input
+          id="name"
+          type="text"
+          bind:value={name}
+          placeholder="Your name"
+          required
+          class="form-input"
+        />
+      </div>
+
       <div class="form-field">
         <label class="form-label" for="email">Email</label>
         <input
@@ -55,7 +69,7 @@
           id="password"
           type="password"
           bind:value={password}
-          placeholder="Your password"
+          placeholder="At least 8 characters"
           required
           minlength="8"
           class="form-input"
@@ -63,12 +77,12 @@
       </div>
 
       <button type="submit" disabled={loading} class="btn-primary">
-        {loading ? "Signing in..." : "Log In"}
+        {loading ? "Creating account..." : "Sign Up"}
       </button>
     </form>
 
     <p class="auth-footer">
-      Don't have an account? <a href="/signup">Sign up</a>
+      Already have an account? <a href="/login">Log in</a>
     </p>
   </div>
 </main>

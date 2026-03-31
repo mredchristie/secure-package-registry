@@ -11,15 +11,12 @@ RUN bun install --frozen-lockfile
 COPY . .
 RUN bun run build
 
-# Production stage
-FROM docker.io/oven/bun:1-slim AS release
-WORKDIR /app
+# Production stage - Use Caddy to serve static files
+FROM docker.io/caddy:2-alpine AS release
+WORKDIR /srv
 
-COPY --from=builder /app/build ./build
-COPY --from=builder /app/package.json ./
+COPY --from=builder /app/build /srv
 
-EXPOSE 3000
 EXPOSE 3000
 
 CMD ["caddy", "file-server", "--root", "/srv", "--listen", ":3000"]
-CMD ["bun", "./build/index.js"]

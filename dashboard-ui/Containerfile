@@ -4,6 +4,8 @@ WORKDIR /app
 
 ARG PUBLIC_HOME_BASE_URL
 ENV PUBLIC_HOME_BASE_URL=${PUBLIC_HOME_BASE_URL}
+ARG PUBLIC_DASHBOARD_BASE_URL
+ENV PUBLIC_DASHBOARD_BASE_URL=${PUBLIC_DASHBOARD_BASE_URL}
 
 # Copy package files
 COPY package.json bun.lock ./
@@ -16,6 +18,12 @@ RUN bun run build
 # Production stage
 FROM docker.io/oven/bun:1-slim AS release
 WORKDIR /app
+
+# ARG is needed here to receive the build arg from compose
+ARG PUBLIC_DASHBOARD_BASE_URL
+
+# Set ORIGIN for SvelteKit CSRF protection (must match the public URL)
+ENV ORIGIN=${PUBLIC_DASHBOARD_BASE_URL}
 
 # Copy built application and dependencies
 COPY --from=builder /app/build ./build

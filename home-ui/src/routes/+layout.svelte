@@ -6,7 +6,6 @@
 
 	// svelte 5 feature props - children contains all page content.
 	let { children, data } = $props();
-	let user = $derived(data.user);
 	// Theme state = true (dark mode) and = false (light mode)
 	let isDark = $state(true);
 
@@ -29,7 +28,7 @@
 </svelte:head>
 
 <div class="app" class:dark={isDark}>
-	<Header {isDark} onToggleTheme={toggleTheme} {user} />
+	<Header {isDark} onToggleTheme={toggleTheme} />
 	<!-- Header component with theme toggle (appears on all pages) -->
 	{@render children()}
 	<!-- Page content rendered here via {@render children()} -->
