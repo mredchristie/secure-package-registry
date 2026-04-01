@@ -56,6 +56,48 @@ func (ns NullCollectionTaskStatus) Value() (driver.Value, error) {
 	return string(ns.CollectionTaskStatus), nil
 }
 
+type DependencyType string
+
+const (
+	DependencyTypeDirect     DependencyType = "direct"
+	DependencyTypeTransitive DependencyType = "transitive"
+)
+
+func (e *DependencyType) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = DependencyType(s)
+	case string:
+		*e = DependencyType(s)
+	default:
+		return fmt.Errorf("unsupported scan type for DependencyType: %T", src)
+	}
+	return nil
+}
+
+type NullDependencyType struct {
+	DependencyType DependencyType
+	Valid          bool // Valid is true if DependencyType is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullDependencyType) Scan(value interface{}) error {
+	if value == nil {
+		ns.DependencyType, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.DependencyType.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullDependencyType) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.DependencyType), nil
+}
+
 type Ecosystem string
 
 const (
@@ -272,6 +314,16 @@ type PackageVersionTag struct {
 	UpdatedAt      pgtype.Timestamptz
 }
 
+type ProjectDependency struct {
+	ID                int32
+	ProjectID         int32
+	PackageID         int32
+	PackageVersionID  int32
+	DependencyType    DependencyType
+	VersionConstraint pgtype.Text
+	CreatedAt         pgtype.Timestamptz
+}
+
 type Session struct {
 	ID                   string
 	ExpiresAt            pgtype.Timestamptz
@@ -291,6 +343,15 @@ type User struct {
 	Image         pgtype.Text
 	CreatedAt     pgtype.Timestamptz
 	UpdatedAt     pgtype.Timestamptz
+}
+
+type UserProject struct {
+	ID         int32
+	UserID     string
+	Name       string
+	SourceType string
+	CreatedAt  pgtype.Timestamptz
+	UpdatedAt  pgtype.Timestamptz
 }
 
 type Verification struct {

@@ -11,6 +11,32 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const deleteProject = `-- name: DeleteProject :exec
+DELETE FROM user_projects
+WHERE id = $1 AND user_id = $2
+`
+
+type DeleteProjectParams struct {
+	ID     int32
+	UserID string
+}
+
+func (q *Queries) DeleteProject(ctx context.Context, arg DeleteProjectParams) error {
+	_, err := q.db.Exec(ctx, deleteProject, arg.ID, arg.UserID)
+	return err
+}
+
+const deleteProjectDependencies = `-- name: DeleteProjectDependencies :exec
+DELETE FROM project_dependencies
+WHERE project_id = $1
+`
+
+// Bulk delete all dependencies for a project (used before re-inserting on re-upload).
+func (q *Queries) DeleteProjectDependencies(ctx context.Context, projectID int32) error {
+	_, err := q.db.Exec(ctx, deleteProjectDependencies, projectID)
+	return err
+}
+
 const getAPIKeyOwner = `-- name: GetAPIKeyOwner :one
 
 SELECT "referenceId" FROM apikey
@@ -86,6 +112,56 @@ func (q *Queries) GetPackageByEcosystemAndIdentifier(ctx context.Context, arg Ge
 		&i.LatestVersion,
 	)
 	return i, err
+}
+
+const getPackageDependents = `-- name: GetPackageDependents :many
+SELECT
+    up.id AS project_id,
+    up.user_id,
+    up.name AS project_name,
+    pd.dependency_type,
+    pv.version
+FROM project_dependencies pd
+JOIN user_projects up ON up.id = pd.project_id
+JOIN package_versions pv ON pv.id = pd.package_version_id
+WHERE pd.package_id = $1
+ORDER BY up.user_id, up.name
+`
+
+type GetPackageDependentsRow struct {
+	ProjectID      int32
+	UserID         string
+	ProjectName    string
+	DependencyType DependencyType
+	Version        string
+}
+
+// Inverse query: find which projects depend on a given package.
+// Used for impact analysis ("who is affected if this package is compromised?").
+func (q *Queries) GetPackageDependents(ctx context.Context, packageID int32) ([]GetPackageDependentsRow, error) {
+	rows, err := q.db.Query(ctx, getPackageDependents, packageID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetPackageDependentsRow
+	for rows.Next() {
+		var i GetPackageDependentsRow
+		if err := rows.Scan(
+			&i.ProjectID,
+			&i.UserID,
+			&i.ProjectName,
+			&i.DependencyType,
+			&i.Version,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getPackageVersion = `-- name: GetPackageVersion :one
@@ -200,6 +276,108 @@ func (q *Queries) GetPackageVersionTags(ctx context.Context, arg GetPackageVersi
 	for rows.Next() {
 		var i GetPackageVersionTagsRow
 		if err := rows.Scan(&i.Label, &i.ValueType, &i.Value); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getProject = `-- name: GetProject :one
+SELECT id, user_id, name, source_type, created_at, updated_at
+FROM user_projects
+WHERE id = $1
+`
+
+func (q *Queries) GetProject(ctx context.Context, id int32) (UserProject, error) {
+	row := q.db.QueryRow(ctx, getProject, id)
+	var i UserProject
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.SourceType,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getProjectByUserAndName = `-- name: GetProjectByUserAndName :one
+SELECT id, user_id, name, source_type, created_at, updated_at
+FROM user_projects
+WHERE user_id = $1 AND name = $2
+`
+
+type GetProjectByUserAndNameParams struct {
+	UserID string
+	Name   string
+}
+
+func (q *Queries) GetProjectByUserAndName(ctx context.Context, arg GetProjectByUserAndNameParams) (UserProject, error) {
+	row := q.db.QueryRow(ctx, getProjectByUserAndName, arg.UserID, arg.Name)
+	var i UserProject
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.SourceType,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getProjectSummary = `-- name: GetProjectSummary :many
+SELECT
+    pd.dependency_type,
+    COUNT(*)::int AS total,
+    COUNT(*) FILTER (WHERE att.value = 'true'::jsonb)::int AS has_attestation,
+    COUNT(*) FILTER (WHERE oss.value = 'true'::jsonb)::int AS has_oss_rebuild,
+    COUNT(*) FILTER (WHERE beh.value = 'true'::jsonb)::int AS behavior_passed
+FROM project_dependencies pd
+LEFT JOIN package_version_tags att
+    ON att.package_version = pd.package_version_id
+    AND att.tag_type = (SELECT id FROM package_tag_types WHERE label = 'upstream_attestation')
+LEFT JOIN package_version_tags oss
+    ON oss.package_version = pd.package_version_id
+    AND oss.tag_type = (SELECT id FROM package_tag_types WHERE label = 'oss_rebuild')
+LEFT JOIN package_version_tags beh
+    ON beh.package_version = pd.package_version_id
+    AND beh.tag_type = (SELECT id FROM package_tag_types WHERE label = 'behavior_passed')
+WHERE pd.project_id = $1
+GROUP BY pd.dependency_type
+`
+
+type GetProjectSummaryRow struct {
+	DependencyType DependencyType
+	Total          int32
+	HasAttestation int32
+	HasOssRebuild  int32
+	BehaviorPassed int32
+}
+
+// Aggregated stats for a project, grouped by dependency type.
+// Returns total count plus counts of deps with each boolean tag set to true.
+func (q *Queries) GetProjectSummary(ctx context.Context, projectID int32) ([]GetProjectSummaryRow, error) {
+	rows, err := q.db.Query(ctx, getProjectSummary, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetProjectSummaryRow
+	for rows.Next() {
+		var i GetProjectSummaryRow
+		if err := rows.Scan(
+			&i.DependencyType,
+			&i.Total,
+			&i.HasAttestation,
+			&i.HasOssRebuild,
+			&i.BehaviorPassed,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -419,6 +597,65 @@ func (q *Queries) InsertPackageVersion(ctx context.Context, arg InsertPackageVer
 	return id, err
 }
 
+const insertProject = `-- name: InsertProject :one
+
+INSERT INTO user_projects (user_id, name, source_type)
+VALUES ($1, $2, $3)
+ON CONFLICT (user_id, name) DO UPDATE SET
+    source_type = EXCLUDED.source_type,
+    updated_at = CURRENT_TIMESTAMP
+RETURNING id, user_id, name, source_type, created_at, updated_at
+`
+
+type InsertProjectParams struct {
+	UserID     string
+	Name       string
+	SourceType string
+}
+
+// Project queries
+// Creates or updates a user project. On conflict (same user+name), updates
+// the source_type and updated_at timestamp.
+func (q *Queries) InsertProject(ctx context.Context, arg InsertProjectParams) (UserProject, error) {
+	row := q.db.QueryRow(ctx, insertProject, arg.UserID, arg.Name, arg.SourceType)
+	var i UserProject
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.SourceType,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const insertProjectDependency = `-- name: InsertProjectDependency :exec
+INSERT INTO project_dependencies (project_id, package_id, package_version_id, dependency_type, version_constraint)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (project_id, package_id, package_version_id) DO NOTHING
+`
+
+type InsertProjectDependencyParams struct {
+	ProjectID         int32
+	PackageID         int32
+	PackageVersionID  int32
+	DependencyType    DependencyType
+	VersionConstraint pgtype.Text
+}
+
+// Inserts a single project dependency. ON CONFLICT ignores duplicates.
+func (q *Queries) InsertProjectDependency(ctx context.Context, arg InsertProjectDependencyParams) error {
+	_, err := q.db.Exec(ctx, insertProjectDependency,
+		arg.ProjectID,
+		arg.PackageID,
+		arg.PackageVersionID,
+		arg.DependencyType,
+		arg.VersionConstraint,
+	)
+	return err
+}
+
 const insertTagType = `-- name: InsertTagType :one
 INSERT INTO package_tag_types (label, description, value_type)
 VALUES ($1, $2, $3)
@@ -600,6 +837,105 @@ func (q *Queries) ListPackagesByEcosystem(ctx context.Context, ecosystem Ecosyst
 			&i.Identifier,
 			&i.Ecosystem,
 			&i.LatestVersion,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProjectDependencies = `-- name: ListProjectDependencies :many
+SELECT
+    pd.id,
+    pd.dependency_type,
+    pd.version_constraint,
+    p.identifier,
+    p.ecosystem::text,
+    pv.version,
+    pd.package_version_id,
+    pd.package_id
+FROM project_dependencies pd
+JOIN packages p ON p.id = pd.package_id
+JOIN package_versions pv ON pv.id = pd.package_version_id
+WHERE pd.project_id = $1
+  AND ($2::DEPENDENCY_TYPE IS NULL OR pd.dependency_type = $2::DEPENDENCY_TYPE)
+ORDER BY pd.dependency_type, p.identifier
+`
+
+type ListProjectDependenciesParams struct {
+	ProjectID int32
+	DepType   NullDependencyType
+}
+
+type ListProjectDependenciesRow struct {
+	ID                int32
+	DependencyType    DependencyType
+	VersionConstraint pgtype.Text
+	Identifier        string
+	PEcosystem        string
+	Version           string
+	PackageVersionID  int32
+	PackageID         int32
+}
+
+// Lists all dependencies for a project with package info and tag status.
+// Optionally filtered by dependency type.
+func (q *Queries) ListProjectDependencies(ctx context.Context, arg ListProjectDependenciesParams) ([]ListProjectDependenciesRow, error) {
+	rows, err := q.db.Query(ctx, listProjectDependencies, arg.ProjectID, arg.DepType)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListProjectDependenciesRow
+	for rows.Next() {
+		var i ListProjectDependenciesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DependencyType,
+			&i.VersionConstraint,
+			&i.Identifier,
+			&i.PEcosystem,
+			&i.Version,
+			&i.PackageVersionID,
+			&i.PackageID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUserProjects = `-- name: ListUserProjects :many
+SELECT id, user_id, name, source_type, created_at, updated_at
+FROM user_projects
+WHERE user_id = $1
+ORDER BY updated_at DESC
+`
+
+func (q *Queries) ListUserProjects(ctx context.Context, userID string) ([]UserProject, error) {
+	rows, err := q.db.Query(ctx, listUserProjects, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UserProject
+	for rows.Next() {
+		var i UserProject
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Name,
+			&i.SourceType,
+			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}

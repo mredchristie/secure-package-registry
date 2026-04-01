@@ -9,14 +9,25 @@ import (
 )
 
 type Querier interface {
+	DeleteProject(ctx context.Context, arg DeleteProjectParams) error
+	// Bulk delete all dependencies for a project (used before re-inserting on re-upload).
+	DeleteProjectDependencies(ctx context.Context, projectID int32) error
 	// Auth queries
 	GetAPIKeyOwner(ctx context.Context, key string) (string, error)
 	GetCollectionTask(ctx context.Context, id int32) (CollectionTask, error)
 	GetPackageByEcosystemAndIdentifier(ctx context.Context, arg GetPackageByEcosystemAndIdentifierParams) (GetPackageByEcosystemAndIdentifierRow, error)
+	// Inverse query: find which projects depend on a given package.
+	// Used for impact analysis ("who is affected if this package is compromised?").
+	GetPackageDependents(ctx context.Context, packageID int32) ([]GetPackageDependentsRow, error)
 	GetPackageVersion(ctx context.Context, arg GetPackageVersionParams) (GetPackageVersionRow, error)
 	// Looks up a package version row ID by ecosystem, identifier, and version.
 	GetPackageVersionID(ctx context.Context, arg GetPackageVersionIDParams) (int32, error)
 	GetPackageVersionTags(ctx context.Context, arg GetPackageVersionTagsParams) ([]GetPackageVersionTagsRow, error)
+	GetProject(ctx context.Context, id int32) (UserProject, error)
+	GetProjectByUserAndName(ctx context.Context, arg GetProjectByUserAndNameParams) (UserProject, error)
+	// Aggregated stats for a project, grouped by dependency type.
+	// Returns total count plus counts of deps with each boolean tag set to true.
+	GetProjectSummary(ctx context.Context, projectID int32) ([]GetProjectSummaryRow, error)
 	// Finds the succeeded collection task for a given ecosystem, package identifier, and version.
 	// Returns the artifact location needed for serving deduped behavior data.
 	GetSucceededCollectionTask(ctx context.Context, arg GetSucceededCollectionTaskParams) (GetSucceededCollectionTaskRow, error)
@@ -36,6 +47,12 @@ type Querier interface {
 	InsertPackage(ctx context.Context, arg InsertPackageParams) (int32, error)
 	InsertPackageTag(ctx context.Context, arg InsertPackageTagParams) error
 	InsertPackageVersion(ctx context.Context, arg InsertPackageVersionParams) (int32, error)
+	// Project queries
+	// Creates or updates a user project. On conflict (same user+name), updates
+	// the source_type and updated_at timestamp.
+	InsertProject(ctx context.Context, arg InsertProjectParams) (UserProject, error)
+	// Inserts a single project dependency. ON CONFLICT ignores duplicates.
+	InsertProjectDependency(ctx context.Context, arg InsertProjectDependencyParams) error
 	InsertTagType(ctx context.Context, arg InsertTagTypeParams) (int32, error)
 	// User/Organisation Queries
 	InsertUser(ctx context.Context, arg InsertUserParams) (string, error)
@@ -45,6 +62,10 @@ type Querier interface {
 	ListPackageVersions(ctx context.Context, packageID int32) ([]string, error)
 	// Poller queries
 	ListPackagesByEcosystem(ctx context.Context, ecosystem Ecosystem) ([]ListPackagesByEcosystemRow, error)
+	// Lists all dependencies for a project with package info and tag status.
+	// Optionally filtered by dependency type.
+	ListProjectDependencies(ctx context.Context, arg ListProjectDependenciesParams) ([]ListProjectDependenciesRow, error)
+	ListUserProjects(ctx context.Context, userID string) ([]UserProject, error)
 	// Resets a failed/cancelled task back to pending for retry.
 	ResetCollectionTask(ctx context.Context, id int32) error
 	SearchPackages(ctx context.Context, arg SearchPackagesParams) ([]SearchPackagesRow, error)

@@ -263,3 +263,102 @@ INSERT INTO "user" (
 ) VALUES ($1, $2, FALSE, NOW(), NOW())
 ON CONFLICT (id) DO NOTHING
 RETURNING "id";
+
+-- Project queries
+
+-- name: InsertProject :one
+-- Creates or updates a user project. On conflict (same user+name), updates
+-- the source_type and updated_at timestamp.
+INSERT INTO user_projects (user_id, name, source_type)
+VALUES ($1, $2, $3)
+ON CONFLICT (user_id, name) DO UPDATE SET
+    source_type = EXCLUDED.source_type,
+    updated_at = CURRENT_TIMESTAMP
+RETURNING id, user_id, name, source_type, created_at, updated_at;
+
+-- name: GetProject :one
+SELECT id, user_id, name, source_type, created_at, updated_at
+FROM user_projects
+WHERE id = $1;
+
+-- name: GetProjectByUserAndName :one
+SELECT id, user_id, name, source_type, created_at, updated_at
+FROM user_projects
+WHERE user_id = $1 AND name = $2;
+
+-- name: ListUserProjects :many
+SELECT id, user_id, name, source_type, created_at, updated_at
+FROM user_projects
+WHERE user_id = $1
+ORDER BY updated_at DESC;
+
+-- name: DeleteProject :exec
+DELETE FROM user_projects
+WHERE id = $1 AND user_id = $2;
+
+-- name: DeleteProjectDependencies :exec
+-- Bulk delete all dependencies for a project (used before re-inserting on re-upload).
+DELETE FROM project_dependencies
+WHERE project_id = $1;
+
+-- name: InsertProjectDependency :exec
+-- Inserts a single project dependency. ON CONFLICT ignores duplicates.
+INSERT INTO project_dependencies (project_id, package_id, package_version_id, dependency_type, version_constraint)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (project_id, package_id, package_version_id) DO NOTHING;
+
+-- name: ListProjectDependencies :many
+-- Lists all dependencies for a project with package info and tag status.
+-- Optionally filtered by dependency type.
+SELECT
+    pd.id,
+    pd.dependency_type,
+    pd.version_constraint,
+    p.identifier,
+    p.ecosystem::text,
+    pv.version,
+    pd.package_version_id,
+    pd.package_id
+FROM project_dependencies pd
+JOIN packages p ON p.id = pd.package_id
+JOIN package_versions pv ON pv.id = pd.package_version_id
+WHERE pd.project_id = $1
+  AND (sqlc.narg(dep_type)::DEPENDENCY_TYPE IS NULL OR pd.dependency_type = sqlc.narg(dep_type)::DEPENDENCY_TYPE)
+ORDER BY pd.dependency_type, p.identifier;
+
+-- name: GetProjectSummary :many
+-- Aggregated stats for a project, grouped by dependency type.
+-- Returns total count plus counts of deps with each boolean tag set to true.
+SELECT
+    pd.dependency_type,
+    COUNT(*)::int AS total,
+    COUNT(*) FILTER (WHERE att.value = 'true'::jsonb)::int AS has_attestation,
+    COUNT(*) FILTER (WHERE oss.value = 'true'::jsonb)::int AS has_oss_rebuild,
+    COUNT(*) FILTER (WHERE beh.value = 'true'::jsonb)::int AS behavior_passed
+FROM project_dependencies pd
+LEFT JOIN package_version_tags att
+    ON att.package_version = pd.package_version_id
+    AND att.tag_type = (SELECT id FROM package_tag_types WHERE label = 'upstream_attestation')
+LEFT JOIN package_version_tags oss
+    ON oss.package_version = pd.package_version_id
+    AND oss.tag_type = (SELECT id FROM package_tag_types WHERE label = 'oss_rebuild')
+LEFT JOIN package_version_tags beh
+    ON beh.package_version = pd.package_version_id
+    AND beh.tag_type = (SELECT id FROM package_tag_types WHERE label = 'behavior_passed')
+WHERE pd.project_id = $1
+GROUP BY pd.dependency_type;
+
+-- name: GetPackageDependents :many
+-- Inverse query: find which projects depend on a given package.
+-- Used for impact analysis ("who is affected if this package is compromised?").
+SELECT
+    up.id AS project_id,
+    up.user_id,
+    up.name AS project_name,
+    pd.dependency_type,
+    pv.version
+FROM project_dependencies pd
+JOIN user_projects up ON up.id = pd.project_id
+JOIN package_versions pv ON pv.id = pd.package_version_id
+WHERE pd.package_id = $1
+ORDER BY up.user_id, up.name;
