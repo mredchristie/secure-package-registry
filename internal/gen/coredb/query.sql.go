@@ -388,6 +388,21 @@ func (q *Queries) GetProjectSummary(ctx context.Context, projectID int32) ([]Get
 	return items, nil
 }
 
+const getSessionUser = `-- name: GetSessionUser :one
+SELECT "userId" FROM "session"
+WHERE "token" = $1
+  AND "expiresAt" > NOW()
+`
+
+// Looks up a BetterAuth session token and returns the owning user ID,
+// provided the session has not expired.
+func (q *Queries) GetSessionUser(ctx context.Context, token string) (string, error) {
+	row := q.db.QueryRow(ctx, getSessionUser, token)
+	var userId string
+	err := row.Scan(&userId)
+	return userId, err
+}
+
 const getSucceededCollectionTask = `-- name: GetSucceededCollectionTask :one
 SELECT
     ct.id,

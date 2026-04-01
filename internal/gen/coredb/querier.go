@@ -28,6 +28,9 @@ type Querier interface {
 	// Aggregated stats for a project, grouped by dependency type.
 	// Returns total count plus counts of deps with each boolean tag set to true.
 	GetProjectSummary(ctx context.Context, projectID int32) ([]GetProjectSummaryRow, error)
+	// Looks up a BetterAuth session token and returns the owning user ID,
+	// provided the session has not expired.
+	GetSessionUser(ctx context.Context, token string) (string, error)
 	// Finds the succeeded collection task for a given ecosystem, package identifier, and version.
 	// Returns the artifact location needed for serving deduped behavior data.
 	GetSucceededCollectionTask(ctx context.Context, arg GetSucceededCollectionTaskParams) (GetSucceededCollectionTaskRow, error)

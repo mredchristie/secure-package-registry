@@ -12,6 +12,9 @@ import (
 	"github.com/go-chi/render"
 )
 
+// betterAuthCookieName is the session cookie set by BetterAuth in the dashboard.
+const betterAuthCookieName = "better-auth.session_token"
+
 // contextKey is an unexported type for context keys in this package.
 type contextKey int
 
@@ -33,38 +36,58 @@ func hashAPIKey(rawKey string) string {
 	return base64.RawURLEncoding.EncodeToString(hash[:])
 }
 
-// AuthMiddleware returns a chi middleware that validates Bearer tokens against
-// the apikey table and injects the owning user ID into the request context.
+// AuthMiddleware returns a chi middleware that authenticates requests via either:
+//  1. Bearer API key (CLI usage) — hashed and looked up in the apikey table.
+//  2. BetterAuth session cookie (dashboard usage) — token looked up in the session table.
+//
+// On success the owning user ID is injected into the request context.
 func AuthMiddleware(db coredb.Querier) func(http.Handler) http.Handler {
 	log := logger.WithComponent("auth-middleware")
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			authHeader := r.Header.Get("Authorization")
-			if authHeader == "" {
-				render.Status(r, http.StatusUnauthorized)
-				render.JSON(w, r, map[string]string{"error": "missing authorization header"})
+			// Strategy 1: Bearer API key.
+			if authHeader := r.Header.Get("Authorization"); authHeader != "" {
+				rawToken, ok := strings.CutPrefix(authHeader, "Bearer ")
+				if !ok || rawToken == "" {
+					render.Status(r, http.StatusUnauthorized)
+					render.JSON(w, r, map[string]string{"error": "invalid authorization header"})
+					return
+				}
+
+				keyHash := hashAPIKey(rawToken)
+				userID, err := db.GetAPIKeyOwner(r.Context(), keyHash)
+				if err != nil {
+					log.Debug().Err(err).Msg("API key lookup failed")
+					render.Status(r, http.StatusUnauthorized)
+					render.JSON(w, r, map[string]string{"error": "invalid or expired API key"})
+					return
+				}
+
+				ctx := context.WithValue(r.Context(), userIDKey, userID)
+				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
 
-			rawToken, ok := strings.CutPrefix(authHeader, "Bearer ")
-			if !ok || rawToken == "" {
-				render.Status(r, http.StatusUnauthorized)
-				render.JSON(w, r, map[string]string{"error": "invalid authorization header"})
+			// Strategy 2: BetterAuth session cookie.
+			cookie, err := r.Cookie(betterAuthCookieName)
+			if err == nil && cookie.Value != "" {
+				userID, err := db.GetSessionUser(r.Context(), cookie.Value)
+				if err != nil {
+					log.Debug().Err(err).Msg("session cookie lookup failed")
+					render.Status(r, http.StatusUnauthorized)
+					render.JSON(w, r, map[string]string{"error": "invalid or expired session"})
+					return
+				}
+
+				ctx := context.WithValue(r.Context(), userIDKey, userID)
+				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
 
-			keyHash := hashAPIKey(rawToken)
-			userID, err := db.GetAPIKeyOwner(r.Context(), keyHash)
-			if err != nil {
-				log.Debug().Err(err).Msg("API key lookup failed")
-				render.Status(r, http.StatusUnauthorized)
-				render.JSON(w, r, map[string]string{"error": "invalid or expired API key"})
-				return
-			}
-
-			ctx := context.WithValue(r.Context(), userIDKey, userID)
-			next.ServeHTTP(w, r.WithContext(ctx))
+			// No credentials provided.
+			render.Status(r, http.StatusUnauthorized)
+			render.JSON(w, r, map[string]string{"error": "missing authorization header or session cookie"})
 		})
 	}
 }

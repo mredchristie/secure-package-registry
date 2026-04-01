@@ -251,6 +251,13 @@ WHERE key = $1
   AND enabled = TRUE
   AND ("expiresAt" IS NULL OR "expiresAt" > NOW());
 
+-- name: GetSessionUser :one
+-- Looks up a BetterAuth session token and returns the owning user ID,
+-- provided the session has not expired.
+SELECT "userId" FROM "session"
+WHERE "token" = $1
+  AND "expiresAt" > NOW();
+
 -- User/Organisation Queries
 
 -- name: InsertUser :one
