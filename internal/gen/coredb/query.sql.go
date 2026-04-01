@@ -683,22 +683,24 @@ const insertUser = `-- name: InsertUser :one
 INSERT INTO "user" (
     "id",
     "name",
+    "email",
     "emailVerified",
     "createdAt",
     "updatedAt"
-) VALUES ($1, $2, FALSE, NOW(), NOW())
+) VALUES ($1, $2, $3, FALSE, NOW(), NOW())
 ON CONFLICT (id) DO NOTHING
 RETURNING "id"
 `
 
 type InsertUserParams struct {
-	ID   string
-	Name string
+	ID    string
+	Name  string
+	Email string
 }
 
 // User/Organisation Queries
 func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) (string, error) {
-	row := q.db.QueryRow(ctx, insertUser, arg.ID, arg.Name)
+	row := q.db.QueryRow(ctx, insertUser, arg.ID, arg.Name, arg.Email)
 	var id string
 	err := row.Scan(&id)
 	return id, err

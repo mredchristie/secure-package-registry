@@ -257,10 +257,11 @@ WHERE key = $1
 INSERT INTO "user" (
     "id",
     "name",
+    "email",
     "emailVerified",
     "createdAt",
     "updatedAt"
-) VALUES ($1, $2, FALSE, NOW(), NOW())
+) VALUES ($1, $2, $3, FALSE, NOW(), NOW())
 ON CONFLICT (id) DO NOTHING
 RETURNING "id";
 

@@ -338,6 +338,7 @@ type Session struct {
 
 type User struct {
 	ID            string
+	Email         string
 	Name          string
 	EmailVerified bool
 	Image         pgtype.Text
