@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import favicon from "$lib/assets/favicon.svg";
-  import { Package, ListTodo, Shield } from "lucide-svelte";
+  import { Package, ListTodo, FolderKanban, Shield } from "lucide-svelte";
   import { page } from "$app/stores";
   import "../../app.css";
 
@@ -14,6 +14,7 @@
   const navItems = [
     { href: "/admin", label: "Packages", icon: Package },
     { href: "/admin/tasks", label: "Tasks", icon: ListTodo },
+    { href: "/admin/projects", label: "Projects", icon: FolderKanban },
   ];
 
   const currentPath = $derived($page.url.pathname);

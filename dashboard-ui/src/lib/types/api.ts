@@ -133,3 +133,61 @@ export interface PackageVersionDetail {
 		data: string; // base64 encoded JSON
 	}>;
 }
+
+export interface VerifyResponse {
+	ecosystem: string;
+	identifier: string;
+	version: string;
+	upstream_attestation: boolean;
+	oss_rebuild: boolean;
+}
+
+// Project dependency tracking types
+
+export type DependencyType = "direct" | "transitive";
+
+export interface Project {
+	id: number;
+	name: string;
+	source_type: string;
+	created_at?: string;
+	updated_at?: string;
+}
+
+export interface ProjectDependency {
+	id: number;
+	identifier: string;
+	ecosystem: string;
+	version: string;
+	dependency_type: DependencyType;
+	version_constraint?: string;
+}
+
+export interface ProjectSummaryRow {
+	dependency_type: DependencyType;
+	total: number;
+	has_attestation: number;
+	has_oss_rebuild: number;
+	behavior_passed: number;
+}
+
+export interface ListProjectsResponse {
+	items: Project[];
+}
+
+export interface UploadProjectResponse {
+	id: number;
+	name: string;
+	source_type: string;
+	total_deps: number;
+	direct_deps: number;
+}
+
+export interface ListProjectDependenciesResponse {
+	items: ProjectDependency[];
+}
+
+export interface ProjectSummaryResponse {
+	project_id: number;
+	summary: ProjectSummaryRow[];
+}
