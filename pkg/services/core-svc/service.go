@@ -145,6 +145,9 @@ func Start(ctx context.Context, deps *services.Deps) error {
 		Querier:   queries,
 		Publisher: publisher,
 		MinIO:     minioClient,
+	}, server.ProjectDeps{
+		Querier:   queries,
+		Publisher: publisher,
 	}, verifier)
 	internalServer := server.NewInternal("0.0.0.0:"+deps.Config.CoreSvc.InternalPort, server.InternalDeps{
 		Querier:         queries,

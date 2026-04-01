@@ -26,10 +26,12 @@ func Run(ctx context.Context, deps *services.Deps) error {
 
 	const userID = "seed-user-1"
 	const userName = "seed-user"
+	const userEmail = "seed@localhost"
 
 	_, err := queries.InsertUser(ctx, coredb.InsertUserParams{
-		ID:   userID,
-		Name: userName,
+		ID:    userID,
+		Name:  userName,
+		Email: userEmail,
 	})
 	if err != nil {
 		log.Warn().Err(err).Msg("User may already exist, continuing")
