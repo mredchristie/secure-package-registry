@@ -19,20 +19,6 @@ type ReproducibleBuildHandler struct {
 	log      zerolog.Logger
 }
 
-// RegisterReproducibleBuildRequest is the payload for registering a reproducible build.
-type RegisterReproducibleBuildRequest struct {
-	Ecosystem  string `json:"ecosystem"`
-	Identifier string `json:"identifier"`
-	Version    string `json:"version"`
-	// Tarball is the base64-encoded .tgz artifact.
-	Tarball string `json:"tarball"`
-}
-
-// RegisterReproducibleBuildResponse is returned on success.
-type RegisterReproducibleBuildResponse struct {
-	PackageVersionID int32 `json:"package_version_id"`
-}
-
 // NewReproducibleBuildHandler creates a chi router for reproducible build endpoints.
 func NewReproducibleBuildHandler(db coredb.Querier, registry *gitea.NpmRegistry) http.Handler {
 	h := &ReproducibleBuildHandler{

@@ -25,18 +25,6 @@ type PackageHandler struct {
 	log       zerolog.Logger
 }
 
-type CreatePackageRequest struct {
-	Identifier string `json:"identifier"`
-	Ecosystem  string `json:"ecosystem"`
-}
-
-type CreatePackageResponse struct {
-	ID            int32  `json:"id"`
-	Identifier    string `json:"identifier"`
-	Ecosystem     string `json:"ecosystem"`
-	AlreadyExists bool   `json:"already_exists"`
-}
-
 func NewPackageHandler(db coredb.Querier, publisher message.Publisher) http.Handler {
 	h := &PackageHandler{
 		db:        db,

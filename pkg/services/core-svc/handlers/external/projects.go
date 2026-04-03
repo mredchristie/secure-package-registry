@@ -54,12 +54,6 @@ func NewProjectHandler(db coredb.Querier, publisher message.Publisher, verifier 
 	return r
 }
 
-// UploadProjectRequest is the request body for uploading/updating a project.
-type UploadProjectRequest struct {
-	Name string `json:"name"`
-	File string `json:"file"` // raw contents of package.json or package-lock.json
-}
-
 // UploadProject creates or replaces a project's dependency set.
 func (h *ProjectHandler) UploadProject(w http.ResponseWriter, r *http.Request) {
 	userID := UserIDFromContext(r.Context())
@@ -186,12 +180,12 @@ func (h *ProjectHandler) UploadProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	render.Status(r, http.StatusCreated)
-	render.JSON(w, r, map[string]any{
-		"id":          project.ID,
-		"name":        project.Name,
-		"source_type": project.SourceType,
-		"total_deps":  len(parsed.All),
-		"direct_deps": len(parsed.DirectDeps()),
+	render.JSON(w, r, UploadProjectResponse{
+		ID:         project.ID,
+		Name:       project.Name,
+		SourceType: project.SourceType,
+		TotalDeps:  len(parsed.All),
+		DirectDeps: len(parsed.DirectDeps()),
 	})
 }
 
@@ -260,31 +254,23 @@ func (h *ProjectHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	type projectResponse struct {
-		ID         int32  `json:"id"`
-		Name       string `json:"name"`
-		SourceType string `json:"source_type"`
-		CreatedAt  string `json:"created_at"`
-		UpdatedAt  string `json:"updated_at"`
-	}
-
-	items := make([]projectResponse, 0, len(projects))
+	items := make([]ProjectListItem, 0, len(projects))
 	for _, p := range projects {
-		resp := projectResponse{
+		item := ProjectListItem{
 			ID:         p.ID,
 			Name:       p.Name,
 			SourceType: p.SourceType,
 		}
 		if p.CreatedAt.Valid {
-			resp.CreatedAt = p.CreatedAt.Time.String()
+			item.CreatedAt = p.CreatedAt.Time.String()
 		}
 		if p.UpdatedAt.Valid {
-			resp.UpdatedAt = p.UpdatedAt.Time.String()
+			item.UpdatedAt = p.UpdatedAt.Time.String()
 		}
-		items = append(items, resp)
+		items = append(items, item)
 	}
 
-	render.JSON(w, r, map[string]any{"items": items})
+	render.JSON(w, r, ProjectListResponse{Items: items})
 }
 
 // GetProject returns a single project by ID, verifying ownership.
@@ -322,16 +308,16 @@ func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp := map[string]any{
-		"id":          project.ID,
-		"name":        project.Name,
-		"source_type": project.SourceType,
+	resp := GetProjectResponse{
+		ID:         project.ID,
+		Name:       project.Name,
+		SourceType: project.SourceType,
 	}
 	if project.CreatedAt.Valid {
-		resp["created_at"] = project.CreatedAt.Time.String()
+		resp.CreatedAt = project.CreatedAt.Time.String()
 	}
 	if project.UpdatedAt.Valid {
-		resp["updated_at"] = project.UpdatedAt.Time.String()
+		resp.UpdatedAt = project.UpdatedAt.Time.String()
 	}
 
 	render.JSON(w, r, resp)
@@ -395,18 +381,9 @@ func (h *ProjectHandler) ListDependencies(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	type depResponse struct {
-		ID                int32  `json:"id"`
-		Identifier        string `json:"identifier"`
-		Ecosystem         string `json:"ecosystem"`
-		Version           string `json:"version"`
-		DependencyType    string `json:"dependency_type"`
-		VersionConstraint string `json:"version_constraint,omitempty"`
-	}
-
-	items := make([]depResponse, 0, len(deps))
+	items := make([]DependencyListItem, 0, len(deps))
 	for _, d := range deps {
-		resp := depResponse{
+		item := DependencyListItem{
 			ID:             d.ID,
 			Identifier:     d.Identifier,
 			Ecosystem:      d.PEcosystem,
@@ -414,12 +391,12 @@ func (h *ProjectHandler) ListDependencies(w http.ResponseWriter, r *http.Request
 			DependencyType: string(d.DependencyType),
 		}
 		if d.VersionConstraint.Valid {
-			resp.VersionConstraint = d.VersionConstraint.String
+			item.VersionConstraint = d.VersionConstraint.String
 		}
-		items = append(items, resp)
+		items = append(items, item)
 	}
 
-	render.JSON(w, r, map[string]any{"items": items})
+	render.JSON(w, r, DependencyListResponse{Items: items})
 }
 
 // GetSummary returns aggregated security posture stats for a project.
@@ -465,17 +442,9 @@ func (h *ProjectHandler) GetSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	type summaryRow struct {
-		DependencyType string `json:"dependency_type"`
-		Total          int32  `json:"total"`
-		HasAttestation int32  `json:"has_attestation"`
-		HasOssRebuild  int32  `json:"has_oss_rebuild"`
-		BehaviorPassed int32  `json:"behavior_passed"`
-	}
-
-	items := make([]summaryRow, 0, len(rows))
+	items := make([]SummaryRow, 0, len(rows))
 	for _, row := range rows {
-		items = append(items, summaryRow{
+		items = append(items, SummaryRow{
 			DependencyType: string(row.DependencyType),
 			Total:          row.Total,
 			HasAttestation: row.HasAttestation,
@@ -484,9 +453,9 @@ func (h *ProjectHandler) GetSummary(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	render.JSON(w, r, map[string]any{
-		"project_id": projectID,
-		"summary":    items,
+	render.JSON(w, r, ProjectSummaryResponse{
+		ProjectID: projectID,
+		Summary:   items,
 	})
 }
 

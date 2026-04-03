@@ -79,33 +79,20 @@ func (h *AdminHandler) ListPackages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	type packageResponse struct {
-		ID            int32   `json:"id"`
-		Identifier    string  `json:"identifier"`
-		Ecosystem     string  `json:"ecosystem"`
-		LatestVersion *string `json:"latest_version"`
-	}
-
-	items := make([]packageResponse, 0, len(packages))
+	items := make([]PackageListItem, 0, len(packages))
 	for _, pkg := range packages {
-		resp := packageResponse{
+		item := PackageListItem{
 			ID:         pkg.ID,
 			Identifier: pkg.Identifier,
 			Ecosystem:  string(pkg.Ecosystem),
 		}
 		if pkg.LatestVersion.Valid {
-			resp.LatestVersion = &pkg.LatestVersion.String
+			item.LatestVersion = &pkg.LatestVersion.String
 		}
-		items = append(items, resp)
+		items = append(items, item)
 	}
 
-	render.JSON(w, r, map[string]any{"items": items})
-}
-
-// AddPackageRequest is the request body for AddPackage.
-type AddPackageRequest struct {
-	Identifier string `json:"identifier"`
-	Ecosystem  string `json:"ecosystem"`
+	render.JSON(w, r, PackageListResponse{Items: items})
 }
 
 // AddPackage creates a new package in the watch list and publishes spr.package.requested.
@@ -162,11 +149,11 @@ func (h *AdminHandler) AddPackage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	render.Status(r, status)
-	render.JSON(w, r, map[string]any{
-		"id":             packageID,
-		"identifier":     req.Identifier,
-		"ecosystem":      req.Ecosystem,
-		"already_exists": alreadyExists,
+	render.JSON(w, r, AddPackageResponse{
+		ID:            packageID,
+		Identifier:    req.Identifier,
+		Ecosystem:     req.Ecosystem,
+		AlreadyExists: alreadyExists,
 	})
 }
 
@@ -213,17 +200,12 @@ func (h *AdminHandler) ListVersions(w http.ResponseWriter, r *http.Request) {
 		latestVersion = &pkg.LatestVersion.String
 	}
 
-	render.JSON(w, r, map[string]any{
-		"identifier":     identifier,
-		"ecosystem":      ecoStr,
-		"latest_version": latestVersion,
-		"versions":       versions,
+	render.JSON(w, r, ListVersionsResponse{
+		Identifier:    identifier,
+		Ecosystem:     ecoStr,
+		LatestVersion: latestVersion,
+		Versions:      versions,
 	})
-}
-
-// TriggerScanRequest is the optional request body for TriggerScan.
-type TriggerScanRequest struct {
-	Version string `json:"version"`
 }
 
 // TriggerScan triggers a behavioral analysis scan for a package version.
@@ -331,12 +313,12 @@ func (h *AdminHandler) TriggerScan(w http.ResponseWriter, r *http.Request) {
 		Msg("Triggered scan via admin API")
 
 	render.Status(r, http.StatusCreated)
-	render.JSON(w, r, map[string]any{
-		"task_id":    task.ID,
-		"identifier": identifier,
-		"ecosystem":  ecoStr,
-		"version":    version,
-		"status":     "pending",
+	render.JSON(w, r, TriggerScanResponse{
+		TaskID:     task.ID,
+		Identifier: identifier,
+		Ecosystem:  ecoStr,
+		Version:    version,
+		Status:     "pending",
 	})
 }
 
@@ -502,23 +484,9 @@ func (h *AdminHandler) ListTasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	type taskResponse struct {
-		ID            int32   `json:"id"`
-		Identifier    string  `json:"identifier"`
-		Ecosystem     string  `json:"ecosystem"`
-		Version       string  `json:"version"`
-		Source        string  `json:"source"`
-		Status        string  `json:"status"`
-		FailureReason *string `json:"failure_reason,omitempty"`
-		HasArtifact   bool    `json:"has_artifact"`
-		StartedAt     *string `json:"started_at,omitempty"`
-		CompletedAt   *string `json:"completed_at,omitempty"`
-		CreatedAt     string  `json:"created_at"`
-	}
-
-	items := make([]taskResponse, 0, len(tasks))
+	items := make([]TaskListItem, 0, len(tasks))
 	for _, t := range tasks {
-		resp := taskResponse{
+		item := TaskListItem{
 			ID:          t.ID,
 			Identifier:  t.Identifier,
 			Ecosystem:   t.PEcosystem,
@@ -528,23 +496,23 @@ func (h *AdminHandler) ListTasks(w http.ResponseWriter, r *http.Request) {
 			HasArtifact: t.ArtifactBucket.Valid && t.ArtifactKey.Valid,
 		}
 		if t.FailureReason.Valid {
-			resp.FailureReason = &t.FailureReason.String
+			item.FailureReason = &t.FailureReason.String
 		}
 		if t.StartedAt.Valid {
 			s := t.StartedAt.Time.String()
-			resp.StartedAt = &s
+			item.StartedAt = &s
 		}
 		if t.CompletedAt.Valid {
 			s := t.CompletedAt.Time.String()
-			resp.CompletedAt = &s
+			item.CompletedAt = &s
 		}
 		if t.CreatedAt.Valid {
-			resp.CreatedAt = t.CreatedAt.Time.String()
+			item.CreatedAt = t.CreatedAt.Time.String()
 		}
-		items = append(items, resp)
+		items = append(items, item)
 	}
 
-	render.JSON(w, r, map[string]any{"items": items})
+	render.JSON(w, r, TaskListResponse{Items: items})
 }
 
 // DownloadArtifact streams the behavioral analysis artifact (.jsonl) for a

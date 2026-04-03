@@ -1,13 +1,18 @@
-// apigen generates OpenAPI 3.0 specification from Go structs using openapi3gen.
+// apigen generates an OpenAPI 3.0 specification from Go structs and route
+// definitions using openapi3gen and the apidef route metadata.
 package main
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"reflect"
 	"strings"
 
+	"git.duti.dev/secure-package-registry/pkg/apidef"
 	"git.duti.dev/secure-package-registry/pkg/pkgdb"
+	"git.duti.dev/secure-package-registry/pkg/services/core-svc/handlers/external"
+	"git.duti.dev/secure-package-registry/pkg/services/core-svc/handlers/private"
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3gen"
 	"gopkg.in/yaml.v3"
@@ -21,7 +26,22 @@ func main() {
 	// key: type name (e.g., "PkgVtype"), value: []enum values
 	enumTypes := make(map[string][]string)
 
-	// Generate schemas from struct instances (pass pointers)
+	// Collect all route definitions.
+	allRoutes := append(external.Routes(), private.Routes()...)
+
+	// Collect all request/response types referenced by routes.
+	var routeTypes []any
+	seen := make(map[reflect.Type]bool)
+	for _, route := range allRoutes {
+		for _, t := range []reflect.Type{route.RequestBody, route.ResponseType} {
+			if t != nil && !seen[t] {
+				seen[t] = true
+				routeTypes = append(routeTypes, reflect.New(t).Interface())
+			}
+		}
+	}
+
+	// Generate schemas from the pkgdb model types (may overlap with route types).
 	if err := generateSchemas(schemas, enumTypes,
 		&pkgdb.PackageVersion{},
 		&pkgdb.TagError{},
@@ -32,13 +52,32 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Add enum schemas for types discovered with enum tags
+	// Generate schemas for all route request/response types.
+	if err := generateSchemas(schemas, enumTypes, routeTypes...); err != nil {
+		fmt.Fprintf(os.Stderr, "Error generating route type schemas: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Add enum schemas for types discovered with enum tags.
 	addEnumSchemas(schemas, enumTypes)
 
-	// Replace inline enums with $ref to named enum schemas
+	// Replace inline enums with $ref to named enum schemas.
 	deduplicateEnumRefs(schemas)
 
-	// Create OpenAPI document
+	// Also generate an ErrorResponse schema.
+	errSchema := openapi3.NewObjectSchema()
+	errSchema.Properties = openapi3.Schemas{
+		"error": &openapi3.SchemaRef{
+			Value: openapi3.NewStringSchema(),
+		},
+	}
+	errSchema.Required = []string{"error"}
+	schemas["ErrorResponse"] = &openapi3.SchemaRef{Value: errSchema}
+
+	// Build paths from route definitions.
+	paths := buildPaths(allRoutes, schemas)
+
+	// Create OpenAPI document.
 	doc := &openapi3.T{
 		OpenAPI: "3.0.3",
 		Info: &openapi3.Info{
@@ -46,26 +85,27 @@ func main() {
 			Description: "API for querying package information and metadata",
 			Version:     "1.0.0",
 		},
+		Paths: paths,
 		Components: &openapi3.Components{
 			Schemas: schemas,
 		},
 	}
 
-	// Create output directory if it doesn't exist
+	// Create output directory if it doesn't exist.
 	outputDir := "docs/svc"
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating directory: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Marshal to YAML
+	// Marshal to YAML.
 	data, err := yaml.Marshal(doc)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error marshaling OpenAPI doc: %v\n", err)
 		os.Exit(1)
 	}
 
-	// Write to file
+	// Write to file.
 	outputPath := outputDir + "/openapi.yaml"
 	if err := os.WriteFile(outputPath, data, 0o644); err != nil {
 		fmt.Fprintf(os.Stderr, "Error writing file: %v\n", err)
@@ -73,6 +113,170 @@ func main() {
 	}
 
 	fmt.Printf("Successfully generated OpenAPI spec at %s\n", outputPath)
+}
+
+// buildPaths constructs the OpenAPI Paths object from route definitions.
+func buildPaths(routes []apidef.RouteDef, schemas openapi3.Schemas) *openapi3.Paths {
+	paths := openapi3.NewPaths()
+
+	for _, route := range routes {
+		// Get or create the path item.
+		pathItem := paths.Value(route.Path)
+		if pathItem == nil {
+			pathItem = &openapi3.PathItem{}
+			paths.Set(route.Path, pathItem)
+		}
+
+		responses := &openapi3.Responses{}
+		op := &openapi3.Operation{
+			Summary:     route.Summary,
+			Description: route.Description,
+			OperationID: route.OperationID,
+			Tags:        []string{route.Tag},
+			Responses:   responses,
+		}
+
+		// Path parameters.
+		for _, paramName := range route.PathParams {
+			op.Parameters = append(op.Parameters, &openapi3.ParameterRef{
+				Value: &openapi3.Parameter{
+					Name:     paramName,
+					In:       "path",
+					Required: true,
+					Schema: &openapi3.SchemaRef{
+						Value: openapi3.NewStringSchema(),
+					},
+				},
+			})
+		}
+
+		// Query parameters.
+		for _, qp := range route.QueryParams {
+			op.Parameters = append(op.Parameters, &openapi3.ParameterRef{
+				Value: &openapi3.Parameter{
+					Name:        qp.Name,
+					In:          "query",
+					Description: qp.Description,
+					Required:    qp.Required,
+					Schema: &openapi3.SchemaRef{
+						Value: openapi3.NewStringSchema(),
+					},
+				},
+			})
+		}
+
+		// Request body.
+		if route.RequestBody != nil {
+			schemaName := route.RequestBody.Name()
+			op.RequestBody = &openapi3.RequestBodyRef{
+				Value: &openapi3.RequestBody{
+					Required: true,
+					Content: openapi3.Content{
+						"application/json": &openapi3.MediaType{
+							Schema: &openapi3.SchemaRef{
+								Ref: "#/components/schemas/" + schemaName,
+							},
+						},
+					},
+				},
+			}
+		}
+
+		// Success response.
+		successCode := fmt.Sprintf("%d", route.SuccessCode)
+		successDesc := http.StatusText(route.SuccessCode)
+
+		if route.SuccessCode == 204 {
+			// No body.
+			op.Responses.Set(successCode, &openapi3.ResponseRef{
+				Value: &openapi3.Response{
+					Description: &successDesc,
+				},
+			})
+		} else if route.StreamResponse {
+			// Raw byte stream.
+			ct := route.ContentType
+			if ct == "" {
+				ct = "application/octet-stream"
+			}
+			op.Responses.Set(successCode, &openapi3.ResponseRef{
+				Value: &openapi3.Response{
+					Description: &successDesc,
+					Content: openapi3.Content{
+						ct: &openapi3.MediaType{
+							Schema: &openapi3.SchemaRef{
+								Value: &openapi3.Schema{
+									Type:   &openapi3.Types{"string"},
+									Format: "binary",
+								},
+							},
+						},
+					},
+				},
+			})
+		} else if route.ResponseType != nil {
+			schemaName := route.ResponseType.Name()
+			op.Responses.Set(successCode, &openapi3.ResponseRef{
+				Value: &openapi3.Response{
+					Description: &successDesc,
+					Content: openapi3.Content{
+						"application/json": &openapi3.MediaType{
+							Schema: &openapi3.SchemaRef{
+								Ref: "#/components/schemas/" + schemaName,
+							},
+						},
+					},
+				},
+			})
+		}
+
+		// Error responses — all endpoints use ErrorResponse.
+		addErrorResponse(op, "400", "Bad Request")
+		if route.Auth {
+			addErrorResponse(op, "401", "Unauthorized")
+		}
+		addErrorResponse(op, "404", "Not Found")
+		addErrorResponse(op, "500", "Internal Server Error")
+
+		// Security requirement for authenticated endpoints.
+		if route.Auth {
+			op.Security = &openapi3.SecurityRequirements{
+				{"BearerAuth": {}},
+			}
+		}
+
+		// Assign the operation to the correct method.
+		switch route.Method {
+		case "GET":
+			pathItem.Get = op
+		case "POST":
+			pathItem.Post = op
+		case "PUT":
+			pathItem.Put = op
+		case "DELETE":
+			pathItem.Delete = op
+		case "PATCH":
+			pathItem.Patch = op
+		}
+	}
+
+	return paths
+}
+
+// addErrorResponse adds a standard error response to an operation.
+func addErrorResponse(op *openapi3.Operation, code, description string) {
+	op.Responses.Set(code, &openapi3.ResponseRef{
+		Value: &openapi3.Response{
+			Description: &description,
+			Content: openapi3.Content{
+				"application/json": &openapi3.MediaType{
+					Schema: &openapi3.SchemaRef{
+						Ref: "#/components/schemas/ErrorResponse",
+					},
+				},
+			},
+		},
+	})
 }
 
 // generateSchemas generates OpenAPI schemas for multiple struct types.
