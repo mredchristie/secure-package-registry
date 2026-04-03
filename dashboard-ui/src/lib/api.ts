@@ -1,3 +1,4 @@
+import { authClient } from "$lib/client.js";
 import type {
 	AddPackageRequest,
 	AddPackageResponse,
@@ -50,6 +51,25 @@ async function fetchJSON<T>(url: string, options?: RequestInit): Promise<T> {
 	}
 
 	return response.json();
+}
+
+// Authenticated fetch — obtains a BetterAuth JWT and sends it as a Bearer token.
+// Used for project API calls that require user authentication.
+async function authenticatedFetchJSON<T>(
+	url: string,
+	options?: RequestInit,
+): Promise<T> {
+	const { data, error } = await authClient.token();
+	if (error || !data?.token) {
+		throw new APIError(401, "Not authenticated");
+	}
+	return fetchJSON(url, {
+		...options,
+		headers: {
+			...options?.headers,
+			Authorization: `Bearer ${data.token}`,
+		},
+	});
 }
 
 // Admin API — for the /admin dashboard
@@ -135,12 +155,16 @@ export const tasksAPI = {
 
 // Project API — for user dependency tracking
 export const projectsAPI = {
-	delete: (projectId: number): Promise<void> => {
-		return fetch(`${API_BASE}/projects/${projectId}`, {
+	delete: async (projectId: number): Promise<void> => {
+		const { data, error } = await authClient.token();
+		if (error || !data?.token) {
+			throw new APIError(401, "Not authenticated");
+		}
+		const res = await fetch(`${API_BASE}/projects/${projectId}`, {
+			headers: { Authorization: `Bearer ${data.token}` },
 			method: "DELETE",
-		}).then((res) => {
-			if (!res.ok) throw new APIError(res.status, "Failed to delete project");
 		});
+		if (!res.ok) throw new APIError(res.status, "Failed to delete project");
 	},
 
 	dependencies: (
@@ -153,23 +177,23 @@ export const projectsAPI = {
 		const url = qs
 			? `${API_BASE}/projects/${projectId}/dependencies?${qs}`
 			: `${API_BASE}/projects/${projectId}/dependencies`;
-		return fetchJSON(url);
+		return authenticatedFetchJSON(url);
 	},
 
 	get: (projectId: number): Promise<Project> => {
-		return fetchJSON(`${API_BASE}/projects/${projectId}`);
+		return authenticatedFetchJSON(`${API_BASE}/projects/${projectId}`);
 	},
 
 	list: (): Promise<ListProjectsResponse> => {
-		return fetchJSON(`${API_BASE}/projects`);
+		return authenticatedFetchJSON(`${API_BASE}/projects`);
 	},
 
 	summary: (projectId: number): Promise<ProjectSummaryResponse> => {
-		return fetchJSON(`${API_BASE}/projects/${projectId}/summary`);
+		return authenticatedFetchJSON(`${API_BASE}/projects/${projectId}/summary`);
 	},
 
 	upload: (name: string, file: string): Promise<UploadProjectResponse> => {
-		return fetchJSON(`${API_BASE}/projects`, {
+		return authenticatedFetchJSON(`${API_BASE}/projects`, {
 			body: JSON.stringify({ file, name }),
 			method: "POST",
 		});
