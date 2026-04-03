@@ -20,6 +20,9 @@
   </div>
   <div class="header-middle">
     <a href="/search" class="nav-link">Search</a>
+    {#if user}
+      <a href="/projects" class="nav-link">Projects</a>
+    {/if}
   </div>
   {#if user}
     <div class="header-right">
@@ -103,6 +106,7 @@
     flex: 1;
     display: flex;
     justify-content: center;
+    gap: 1.5rem;
   }
 
   .theme-toggle {

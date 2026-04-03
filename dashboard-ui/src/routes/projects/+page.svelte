@@ -42,10 +42,10 @@
     try {
       return new Date(dateStr).toLocaleDateString("en-GB", {
         day: "numeric",
-        month: "short",
-        year: "numeric",
         hour: "2-digit",
         minute: "2-digit",
+        month: "short",
+        year: "numeric",
       });
     } catch {
       return dateStr.slice(0, 19);
@@ -57,13 +57,17 @@
   });
 </script>
 
+<svelte:head>
+  <title>Projects - SPR</title>
+</svelte:head>
+
 <div class="page">
   <div class="page-header">
     <div>
       <h1 class="page-title">Projects</h1>
       <p class="page-subtitle">Track dependencies across your applications</p>
     </div>
-    <a href="/admin/projects/new" class="add-button">
+    <a href="/projects/new" class="add-button">
       <Plus class="icon-sm" />
       New Project
     </a>
@@ -101,7 +105,7 @@
     <div class="projects-grid">
       {#each projects as project}
         <div class="project-card">
-          <a href="/admin/projects/{project.id}" class="project-card-link">
+          <a href="/projects/{project.id}" class="project-card-link">
             <div class="card-top">
               <span class="project-name">{project.name}</span>
               <span class="source-badge">{project.source_type}</span>
@@ -137,6 +141,8 @@
 <style>
   .page {
     padding: 2rem;
+    max-width: 60rem;
+    margin: 0 auto;
   }
 
   .page-header {

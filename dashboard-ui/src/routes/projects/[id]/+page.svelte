@@ -9,11 +9,11 @@
   } from "$lib/types/api";
   import {
     AlertCircle,
-    Loader2,
     ArrowLeft,
-    ShieldCheck,
-    ShieldAlert,
+    Loader2,
     Package,
+    ShieldAlert,
+    ShieldCheck,
   } from "lucide-svelte";
 
   const projectId = $derived(Number($page.params.id));
@@ -63,7 +63,7 @@
     try {
       const response = await projectsAPI.summary(projectId);
       summary = response.summary;
-    } catch (e) {
+    } catch {
       // Non-fatal: summary is supplementary.
     } finally {
       loadingSummary = false;
@@ -75,10 +75,10 @@
     try {
       return new Date(dateStr).toLocaleDateString("en-GB", {
         day: "numeric",
-        month: "short",
-        year: "numeric",
         hour: "2-digit",
         minute: "2-digit",
+        month: "short",
+        year: "numeric",
       });
     } catch {
       return dateStr.slice(0, 19);
@@ -125,10 +125,14 @@
   });
 </script>
 
+<svelte:head>
+  <title>{project?.name ?? "Project"} - SPR</title>
+</svelte:head>
+
 <div class="page">
   <!-- Header -->
   <div class="page-header">
-    <a href="/admin/projects" class="back-link">
+    <a href="/projects" class="back-link">
       <ArrowLeft class="icon-sm" />
       Back to Projects
     </a>
@@ -288,6 +292,8 @@
 <style>
   .page {
     padding: 2rem;
+    max-width: 60rem;
+    margin: 0 auto;
   }
 
   .page-header {

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { projectsAPI } from "$lib/api";
-  import { AlertCircle, Loader2, Upload, ArrowLeft } from "lucide-svelte";
+  import { AlertCircle, ArrowLeft, Loader2, Upload } from "lucide-svelte";
 
   let projectName = $state("");
   let fileContent = $state("");
@@ -49,7 +49,7 @@
 
     try {
       const result = await projectsAPI.upload(projectName.trim(), fileContent);
-      await goto(`/admin/projects/${result.id}`);
+      await goto(`/projects/${result.id}`);
     } catch (e) {
       error = e instanceof Error ? e.message : "Failed to create project";
     } finally {
@@ -58,9 +58,13 @@
   }
 </script>
 
+<svelte:head>
+  <title>New Project - SPR</title>
+</svelte:head>
+
 <div class="page">
   <div class="page-header">
-    <a href="/admin/projects" class="back-link">
+    <a href="/projects" class="back-link">
       <ArrowLeft class="icon-sm" />
       Back to Projects
     </a>
@@ -121,7 +125,7 @@
     </div>
 
     <div class="form-footer">
-      <a href="/admin/projects" class="btn-secondary">Cancel</a>
+      <a href="/projects" class="btn-secondary">Cancel</a>
       <button onclick={handleSubmit} disabled={loading} class="btn-primary">
         {#if loading}
           <Loader2 class="icon-spin" />
@@ -136,6 +140,7 @@
   .page {
     padding: 2rem;
     max-width: 40rem;
+    margin: 0 auto;
   }
 
   .page-header {
