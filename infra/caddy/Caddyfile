@@ -16,8 +16,13 @@
 		reverse_proxy spr:8080
 	}
 
-	route /api/v1/projects/* {
+	@project path /api/v1/projects /api/v1/projects/*
+	route @project {
 		reverse_proxy spr:8080
+	}
+
+	route /api/auth/* {
+		reverse_proxy dashboard-ui:3000
 	}
 
 	route /* {

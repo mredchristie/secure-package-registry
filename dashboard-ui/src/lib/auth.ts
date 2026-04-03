@@ -12,6 +12,8 @@ const trustedOrigins = process.env.TRUSTED_ORIGINS?.split(",")
 	.filter((origin) => origin.length > 0) ?? ["http://localhost:7001"];
 
 export const auth = betterAuth({
+	baseURL: process.env.PUBLIC_DASHBOARD_BASE_URL || "http://localhost:7001",
+
 	database: new Pool({
 		database: process.env.POSTGRES_DB,
 		host: process.env.POSTGRES_HOST,
