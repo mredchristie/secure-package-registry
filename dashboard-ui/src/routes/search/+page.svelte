@@ -119,7 +119,6 @@
         {loading ? "Searching…" : "Search"}
       </button>
 
-      <button class="btn-add" type="button">+ Add Package</button>
     </div>
 
     {#if hasSearched && !loading}

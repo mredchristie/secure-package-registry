@@ -148,6 +148,7 @@ func Start(ctx context.Context, deps *services.Deps) error {
 	}, server.ProjectDeps{
 		Querier:   queries,
 		Publisher: publisher,
+		NPMClient: npmClient,
 	}, verifier)
 	internalServer := server.NewInternal("0.0.0.0:"+deps.Config.CoreSvc.InternalPort, server.InternalDeps{
 		Querier:         queries,

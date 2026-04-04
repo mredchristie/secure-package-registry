@@ -6,6 +6,7 @@ import (
 
 	"git.duti.dev/secure-package-registry/internal/gen/coredb"
 	sprminio "git.duti.dev/secure-package-registry/pkg/minio"
+	"git.duti.dev/secure-package-registry/pkg/npm"
 	"git.duti.dev/secure-package-registry/pkg/pkgdb"
 	"git.duti.dev/secure-package-registry/pkg/services/core-svc/handlers/external"
 	"git.duti.dev/secure-package-registry/pkg/verification"
@@ -25,6 +26,7 @@ type AdminDeps struct {
 type ProjectDeps struct {
 	Querier   coredb.Querier
 	Publisher message.Publisher
+	NPMClient *npm.Client
 }
 
 // NewExternal creates the external API server with public, admin, and project routes.
@@ -57,7 +59,7 @@ func NewExternal(addr string, db *pkgdb.Client, admin AdminDeps, project Project
 	// Project routes (authenticated via API key)
 	r.Route("/api/v1/projects", func(r chi.Router) {
 		r.Use(external.AuthMiddleware(project.Querier))
-		r.Mount("/", external.NewProjectHandler(project.Querier, project.Publisher, verifier))
+		r.Mount("/", external.NewProjectHandler(project.Querier, project.Publisher, verifier, project.NPMClient))
 	})
 
 	return New("external", addr, r)

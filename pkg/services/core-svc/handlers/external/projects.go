@@ -12,6 +12,7 @@ import (
 	"git.duti.dev/secure-package-registry/internal/messages"
 	"git.duti.dev/secure-package-registry/pkg/lockfile"
 	"git.duti.dev/secure-package-registry/pkg/logger"
+	"git.duti.dev/secure-package-registry/pkg/npm"
 	"git.duti.dev/secure-package-registry/pkg/verification"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -30,16 +31,18 @@ type ProjectHandler struct {
 	db        coredb.Querier
 	publisher message.Publisher
 	verifier  *verification.Service
+	npmClient *npm.Client
 	log       zerolog.Logger
 }
 
 // NewProjectHandler creates a new ProjectHandler and registers its routes.
 // The returned handler must be mounted behind AuthMiddleware.
-func NewProjectHandler(db coredb.Querier, publisher message.Publisher, verifier *verification.Service) http.Handler {
+func NewProjectHandler(db coredb.Querier, publisher message.Publisher, verifier *verification.Service, npmClient *npm.Client) http.Handler {
 	h := &ProjectHandler{
 		db:        db,
 		publisher: publisher,
 		verifier:  verifier,
+		npmClient: npmClient,
 		log:       logger.WithComponent("project-handler"),
 	}
 
@@ -116,11 +119,24 @@ func (h *ProjectHandler) UploadProject(w http.ResponseWriter, r *http.Request) {
 	scansTriggered := 0
 
 	for _, dep := range parsed.All {
-		// For package.json files, Version is empty and only Constraint is set.
-		// Use the constraint as the version string so we have something meaningful.
+		// Resolve the version: lock files provide exact versions; package.json
+		// only has constraints (e.g. "^5.48.2") that must be resolved against
+		// the npm registry to find the highest matching release.
 		version := dep.Version
+		if version == "" && dep.Constraint != "" {
+			resolved, err := h.npmClient.ResolveConstraint(ctx, dep.Name, dep.Constraint)
+			if err != nil {
+				h.log.Warn().Err(err).
+					Str("dep", dep.Name).
+					Str("constraint", dep.Constraint).
+					Msg("Failed to resolve version constraint — skipping dependency")
+				continue
+			}
+			version = resolved
+		}
 		if version == "" {
-			version = dep.Constraint
+			h.log.Warn().Str("dep", dep.Name).Msg("No version or constraint — skipping dependency")
+			continue
 		}
 
 		// Upsert the package.

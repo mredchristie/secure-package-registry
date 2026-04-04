@@ -274,3 +274,19 @@ func matchVersion(pkg *NPMPackage, constraint string) (string, error) {
 func nodeKey(name, version string) string {
 	return name + "@" + version
 }
+
+// ResolveConstraint fetches the package metadata from the npm registry and
+// returns the highest version that satisfies the given semver constraint.
+// This is used to resolve constraints from package.json (e.g. "^5.48.2")
+// into exact versions (e.g. "5.50.1").
+func (c *Client) ResolveConstraint(ctx context.Context, pkgName, constraint string) (string, error) {
+	meta, err := c.FetchPackageMetadata(ctx, pkgName)
+	if err != nil {
+		return "", fmt.Errorf("fetching metadata for %s: %w", pkgName, err)
+	}
+	resolved, err := matchVersion(meta, constraint)
+	if err != nil {
+		return "", fmt.Errorf("resolving %s@%s: %w", pkgName, constraint, err)
+	}
+	return resolved, nil
+}
