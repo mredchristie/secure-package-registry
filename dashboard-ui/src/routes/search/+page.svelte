@@ -118,7 +118,6 @@
       <button onclick={searchPackages} disabled={loading} class="btn-search">
         {loading ? "Searching…" : "Search"}
       </button>
-
     </div>
 
     {#if hasSearched && !loading}

@@ -23,9 +23,6 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// maxConcurrentScans is the per-user limit for concurrent behavioral analysis runs.
-const maxConcurrentScans = 5
-
 // ProjectHandler handles project CRUD and dependency management.
 type ProjectHandler struct {
 	db        coredb.Querier
@@ -115,9 +112,6 @@ func (h *ProjectHandler) UploadProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Track how many scans we trigger for the concurrency limit.
-	scansTriggered := 0
-
 	for _, dep := range parsed.All {
 		// Resolve the version: lock files provide exact versions; package.json
 		// only has constraints (e.g. "^5.48.2") that must be resolved against
@@ -187,11 +181,9 @@ func (h *ProjectHandler) UploadProject(w http.ResponseWriter, r *http.Request) {
 			h.log.Debug().Err(verErr).Str("dep", dep.Name+"@"+version).Msg("Auto-verification failed (non-fatal)")
 		}
 
-		// Trigger behavioral analysis for DIRECT deps only, respecting concurrency limit.
-		if dep.Direct && scansTriggered < maxConcurrentScans {
-			if triggered := h.triggerBehavioralAnalysis(ctx, dep.Name, version, pvID); triggered {
-				scansTriggered++
-			}
+		// Trigger behavioral analysis for DIRECT deps only.
+		if dep.Direct {
+			h.triggerBehavioralAnalysis(ctx, dep.Name, version, pvID)
 		}
 	}
 
