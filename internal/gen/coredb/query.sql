@@ -39,6 +39,12 @@ WHERE p.identifier ILIKE '%' || sqlc.arg(query) || '%'
 ORDER BY p.identifier
 LIMIT sqlc.arg(page_size) OFFSET (sqlc.arg(page) - 1) * sqlc.arg(page_size);
 
+-- name: CountSearchPackages :one
+SELECT COUNT(*)
+FROM packages p
+WHERE p.identifier ILIKE '%' || sqlc.arg(query) || '%'
+  AND (sqlc.narg(ecosystem)::ECOSYSTEM IS NULL OR p.ecosystem = sqlc.narg(ecosystem)::ECOSYSTEM);
+
 -- name: InsertPackage :one
 INSERT INTO packages (identifier, ecosystem, latest_version)
 VALUES ($1, $2, $3)
@@ -403,3 +409,29 @@ JOIN user_projects up ON up.id = pd.project_id
 JOIN package_versions pv ON pv.id = pd.package_version_id
 WHERE pd.package_id = $1
 ORDER BY up.user_id, up.name;
+
+-- name: ListPackageVersionsPublic :many
+-- Lists all versions for a package by ecosystem+identifier, with their verification tags.
+SELECT
+    pv.version,
+    (pv.version = p.latest_version) AS latest,
+    pv.source_url,
+    pv.source_tag,
+    pv.source_commit_hash,
+    COALESCE((SELECT pvt.value = 'true'
+     FROM package_version_tags pvt
+     JOIN package_tag_types ptt ON ptt.id = pvt.tag_type
+     WHERE pvt.package_version = pv.id AND ptt.label = 'upstream_attestation'), false)::bool AS has_attestation,
+    COALESCE((SELECT pvt.value = 'true'
+     FROM package_version_tags pvt
+     JOIN package_tag_types ptt ON ptt.id = pvt.tag_type
+     WHERE pvt.package_version = pv.id AND ptt.label = 'oss_rebuild'), false)::bool AS has_oss_rebuild,
+    COALESCE((SELECT pvt.value = 'true'
+     FROM package_version_tags pvt
+     JOIN package_tag_types ptt ON ptt.id = pvt.tag_type
+     WHERE pvt.package_version = pv.id AND ptt.label = 'behavior_passed'), false)::bool AS behavior_passed
+FROM package_versions pv
+JOIN packages p ON p.id = pv.package_id
+WHERE p.ecosystem = $1
+  AND p.identifier = $2
+ORDER BY pv.created_at DESC;

@@ -11,6 +11,25 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countSearchPackages = `-- name: CountSearchPackages :one
+SELECT COUNT(*)
+FROM packages p
+WHERE p.identifier ILIKE '%' || $1 || '%'
+  AND ($2::ECOSYSTEM IS NULL OR p.ecosystem = $2::ECOSYSTEM)
+`
+
+type CountSearchPackagesParams struct {
+	Query     pgtype.Text
+	Ecosystem NullEcosystem
+}
+
+func (q *Queries) CountSearchPackages(ctx context.Context, arg CountSearchPackagesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countSearchPackages, arg.Query, arg.Ecosystem)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const deleteProject = `-- name: DeleteProject :exec
 DELETE FROM user_projects
 WHERE id = $1 AND user_id = $2
@@ -904,6 +923,78 @@ func (q *Queries) ListPackageVersions(ctx context.Context, packageID int32) ([]s
 			return nil, err
 		}
 		items = append(items, version)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPackageVersionsPublic = `-- name: ListPackageVersionsPublic :many
+SELECT
+    pv.version,
+    (pv.version = p.latest_version) AS latest,
+    pv.source_url,
+    pv.source_tag,
+    pv.source_commit_hash,
+    COALESCE((SELECT pvt.value = 'true'
+     FROM package_version_tags pvt
+     JOIN package_tag_types ptt ON ptt.id = pvt.tag_type
+     WHERE pvt.package_version = pv.id AND ptt.label = 'upstream_attestation'), false)::bool AS has_attestation,
+    COALESCE((SELECT pvt.value = 'true'
+     FROM package_version_tags pvt
+     JOIN package_tag_types ptt ON ptt.id = pvt.tag_type
+     WHERE pvt.package_version = pv.id AND ptt.label = 'oss_rebuild'), false)::bool AS has_oss_rebuild,
+    COALESCE((SELECT pvt.value = 'true'
+     FROM package_version_tags pvt
+     JOIN package_tag_types ptt ON ptt.id = pvt.tag_type
+     WHERE pvt.package_version = pv.id AND ptt.label = 'behavior_passed'), false)::bool AS behavior_passed
+FROM package_versions pv
+JOIN packages p ON p.id = pv.package_id
+WHERE p.ecosystem = $1
+  AND p.identifier = $2
+ORDER BY pv.created_at DESC
+`
+
+type ListPackageVersionsPublicParams struct {
+	Ecosystem  Ecosystem
+	Identifier string
+}
+
+type ListPackageVersionsPublicRow struct {
+	Version          string
+	Latest           bool
+	SourceUrl        pgtype.Text
+	SourceTag        pgtype.Text
+	SourceCommitHash pgtype.Text
+	HasAttestation   bool
+	HasOssRebuild    bool
+	BehaviorPassed   bool
+}
+
+// Lists all versions for a package by ecosystem+identifier, with their verification tags.
+func (q *Queries) ListPackageVersionsPublic(ctx context.Context, arg ListPackageVersionsPublicParams) ([]ListPackageVersionsPublicRow, error) {
+	rows, err := q.db.Query(ctx, listPackageVersionsPublic, arg.Ecosystem, arg.Identifier)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPackageVersionsPublicRow
+	for rows.Next() {
+		var i ListPackageVersionsPublicRow
+		if err := rows.Scan(
+			&i.Version,
+			&i.Latest,
+			&i.SourceUrl,
+			&i.SourceTag,
+			&i.SourceCommitHash,
+			&i.HasAttestation,
+			&i.HasOssRebuild,
+			&i.BehaviorPassed,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

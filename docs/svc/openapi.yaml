@@ -236,6 +236,15 @@ components:
                     items:
                         $ref: '#/components/schemas/PackageSummary'
                     type: array
+                page:
+                    format: int32
+                    type: integer
+                page_size:
+                    format: int32
+                    type: integer
+                total_count:
+                    format: int64
+                    type: integer
             type: object
         Source:
             properties:
@@ -351,6 +360,32 @@ components:
                 name:
                     type: string
                 status:
+                    type: string
+            type: object
+        VersionListResult:
+            properties:
+                ecosystem:
+                    $ref: '#/components/schemas/Ecosystem'
+                identifier:
+                    type: string
+                versions:
+                    items:
+                        $ref: '#/components/schemas/VersionSummary'
+                    type: array
+            type: object
+        VersionSummary:
+            properties:
+                behavior_passed:
+                    type: boolean
+                has_attestation:
+                    type: boolean
+                has_oss_rebuild:
+                    type: boolean
+                latest:
+                    type: boolean
+                source:
+                    $ref: '#/components/schemas/Source'
+                version:
                     type: string
             type: object
 info:
@@ -1206,5 +1241,48 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Internal Server Error
             summary: Verify package version
+            tags:
+                - Packages
+    /api/v1/svc/packages/{ecosystem}/{identifier}/versions:
+        get:
+            description: List all known versions for a package with their verification status.
+            operationId: listPackageVersionsPublic
+            parameters:
+                - in: path
+                  name: ecosystem
+                  required: true
+                  schema:
+                    type: string
+                - in: path
+                  name: identifier
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/VersionListResult'
+                    description: OK
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: Bad Request
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: Not Found
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: Internal Server Error
+            summary: List package versions
             tags:
                 - Packages

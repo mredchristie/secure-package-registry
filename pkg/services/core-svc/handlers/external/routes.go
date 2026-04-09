@@ -51,6 +51,17 @@ func Routes() []apidef.RouteDef {
 			SuccessCode:  200,
 			PathParams:   []string{"ecosystem", "identifier", "version"},
 		},
+		{
+			Method:       "GET",
+			Path:         "/api/v1/svc/packages/{ecosystem}/{identifier}/versions",
+			Summary:      "List package versions",
+			Description:  "List all known versions for a package with their verification status.",
+			Tag:          "Packages",
+			OperationID:  "listPackageVersionsPublic",
+			ResponseType: reflect.TypeOf(pkgdb.VersionListResult{}),
+			SuccessCode:  200,
+			PathParams:   []string{"ecosystem", "identifier"},
+		},
 
 		// --- Admin routes ---
 		{

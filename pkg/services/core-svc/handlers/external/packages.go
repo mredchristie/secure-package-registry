@@ -21,8 +21,9 @@ func NewPackageHandler(db *pkgdb.Client) http.Handler {
 	h := &PackageHandler{db: db}
 
 	r := chi.NewRouter()
-	r.Get("/", h.Search)                                       // GET /packages?q=...&ecosystem=...&page=...&page_size=...
-	r.Get("/{ecosystem}/{identifier}/{version}", h.GetVersion) // GET /packages/{ecosystem}/{identifier}/{version}
+	r.Get("/", h.Search)                                        // GET /packages?q=...&ecosystem=...&page=...&page_size=...
+	r.Get("/{ecosystem}/{identifier}/versions", h.ListVersions) // GET /packages/{ecosystem}/{identifier}/versions
+	r.Get("/{ecosystem}/{identifier}/{version}", h.GetVersion)  // GET /packages/{ecosystem}/{identifier}/{version}
 
 	return r
 }
@@ -83,4 +84,19 @@ func (h *PackageHandler) GetVersion(w http.ResponseWriter, r *http.Request) {
 	}
 
 	render.JSON(w, r, pv)
+}
+
+// ListVersions handles requests for listing all versions of a package.
+func (h *PackageHandler) ListVersions(w http.ResponseWriter, r *http.Request) {
+	ecosystem := pkgdb.Ecosystem(chi.URLParam(r, "ecosystem"))
+	identifier, _ := url.PathUnescape(chi.URLParam(r, "identifier"))
+
+	result, err := h.db.ListVersionsPublic(r.Context(), ecosystem, identifier)
+	if err != nil {
+		render.Status(r, http.StatusNotFound)
+		render.JSON(w, r, map[string]string{"error": "package not found"})
+		return
+	}
+
+	render.JSON(w, r, result)
 }

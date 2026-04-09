@@ -117,6 +117,56 @@ func pgtypeInt4ToInt32(i pgtype.Int4) int32 {
 	return 0
 }
 
+// VersionSummary represents a version in a version list with verification status
+type VersionSummary struct {
+	Version        string `json:"version"`
+	Latest         bool   `json:"latest"`
+	Source         Source `json:"source"`
+	HasAttestation bool   `json:"has_attestation"`
+	HasOSSRebuild  bool   `json:"has_oss_rebuild"`
+	BehaviorPassed bool   `json:"behavior_passed"`
+}
+
+// VersionListResult holds a list of version summaries for a package
+type VersionListResult struct {
+	Identifier string           `json:"identifier"`
+	Ecosystem  Ecosystem        `json:"ecosystem" enum:"npm,go,cargo,pypi"`
+	Versions   []VersionSummary `json:"versions"`
+}
+
+// ListVersionsPublic returns all versions for a package with their verification tags
+func (c *Client) ListVersionsPublic(ctx context.Context, ecosystem Ecosystem, identifier string) (*VersionListResult, error) {
+	rows, err := c.queries.ListPackageVersionsPublic(ctx, coredb.ListPackageVersionsPublicParams{
+		Ecosystem:  coredb.Ecosystem(ecosystem),
+		Identifier: identifier,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list versions: %w", err)
+	}
+
+	versions := make([]VersionSummary, 0, len(rows))
+	for _, row := range rows {
+		versions = append(versions, VersionSummary{
+			Version: row.Version,
+			Latest:  row.Latest,
+			Source: Source{
+				URL:    pgtypeTextToString(row.SourceUrl),
+				Tag:    pgtypeTextToString(row.SourceTag),
+				Commit: pgtypeTextToString(row.SourceCommitHash),
+			},
+			HasAttestation: row.HasAttestation,
+			HasOSSRebuild:  row.HasOssRebuild,
+			BehaviorPassed: row.BehaviorPassed,
+		})
+	}
+
+	return &VersionListResult{
+		Identifier: identifier,
+		Ecosystem:  ecosystem,
+		Versions:   versions,
+	}, nil
+}
+
 // isNotFoundError checks if the error indicates no rows were found
 func isNotFoundError(err error) bool {
 	return err == sql.ErrNoRows || err.Error() == "no rows in result set"

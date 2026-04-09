@@ -25,7 +25,10 @@ type SearchParams struct {
 
 // SearchResult represents a paginated search response
 type SearchResult struct {
-	Items []PackageSummary `json:"items"`
+	Items      []PackageSummary `json:"items"`
+	TotalCount int64            `json:"total_count"`
+	Page       int32            `json:"page"`
+	PageSize   int32            `json:"page_size"`
 }
 
 // SearchPackages searches for packages matching the query
@@ -39,9 +42,20 @@ func (c *Client) SearchPackages(ctx context.Context, params SearchParams) (*Sear
 		}
 	}
 
+	queryParam := pgtype.Text{String: params.Query, Valid: true}
+
+	// Execute count query
+	totalCount, err := c.queries.CountSearchPackages(ctx, coredb.CountSearchPackagesParams{
+		Query:     queryParam,
+		Ecosystem: ecosystemParam,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to count search results: %w", err)
+	}
+
 	// Execute search query
 	rows, err := c.queries.SearchPackages(ctx, coredb.SearchPackagesParams{
-		Query:     pgtype.Text{String: params.Query, Valid: true},
+		Query:     queryParam,
 		Ecosystem: ecosystemParam,
 		Page:      params.Page,
 		PageSize:  params.PageSize,
@@ -65,6 +79,9 @@ func (c *Client) SearchPackages(ctx context.Context, params SearchParams) (*Sear
 	}
 
 	return &SearchResult{
-		Items: items,
+		Items:      items,
+		TotalCount: totalCount,
+		Page:       params.Page,
+		PageSize:   params.PageSize,
 	}, nil
 }

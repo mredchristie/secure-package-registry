@@ -9,6 +9,7 @@ import (
 )
 
 type Querier interface {
+	CountSearchPackages(ctx context.Context, arg CountSearchPackagesParams) (int64, error)
 	DeleteProject(ctx context.Context, arg DeleteProjectParams) error
 	// Bulk delete all dependencies for a project (used before re-inserting on re-upload).
 	DeleteProjectDependencies(ctx context.Context, projectID int32) error
@@ -70,6 +71,8 @@ type Querier interface {
 	// Ordered by most recently created first, paginated.
 	ListCollectionTasks(ctx context.Context, arg ListCollectionTasksParams) ([]ListCollectionTasksRow, error)
 	ListPackageVersions(ctx context.Context, packageID int32) ([]string, error)
+	// Lists all versions for a package by ecosystem+identifier, with their verification tags.
+	ListPackageVersionsPublic(ctx context.Context, arg ListPackageVersionsPublicParams) ([]ListPackageVersionsPublicRow, error)
 	// Poller queries
 	ListPackagesByEcosystem(ctx context.Context, ecosystem Ecosystem) ([]ListPackagesByEcosystemRow, error)
 	// Lists all dependencies for a project with package info and per-dep check statuses.
