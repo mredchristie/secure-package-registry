@@ -161,6 +161,9 @@ export interface ProjectDependency {
 	version: string;
 	dependency_type: DependencyType;
 	version_constraint?: string;
+	has_attestation: boolean;
+	has_oss_rebuild: boolean;
+	behavior_passed: boolean;
 }
 
 export interface ProjectSummaryRow {

@@ -316,7 +316,7 @@ VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (project_id, package_id, package_version_id) DO NOTHING;
 
 -- name: ListProjectDependencies :many
--- Lists all dependencies for a project with package info and tag status.
+-- Lists all dependencies for a project with package info and per-dep check statuses.
 -- Optionally filtered by dependency type.
 SELECT
     pd.id,
@@ -326,10 +326,22 @@ SELECT
     p.ecosystem::text,
     pv.version,
     pd.package_version_id,
-    pd.package_id
+    pd.package_id,
+    COALESCE(att.value = 'true'::jsonb, false)::bool AS has_attestation,
+    COALESCE(oss.value = 'true'::jsonb, false)::bool AS has_oss_rebuild,
+    COALESCE(beh.value = 'true'::jsonb, false)::bool AS behavior_passed
 FROM project_dependencies pd
 JOIN packages p ON p.id = pd.package_id
 JOIN package_versions pv ON pv.id = pd.package_version_id
+LEFT JOIN package_version_tags att
+    ON att.package_version = pd.package_version_id
+    AND att.tag_type = (SELECT id FROM package_tag_types WHERE label = 'upstream_attestation')
+LEFT JOIN package_version_tags oss
+    ON oss.package_version = pd.package_version_id
+    AND oss.tag_type = (SELECT id FROM package_tag_types WHERE label = 'oss_rebuild')
+LEFT JOIN package_version_tags beh
+    ON beh.package_version = pd.package_version_id
+    AND beh.tag_type = (SELECT id FROM package_tag_types WHERE label = 'behavior_passed')
 WHERE pd.project_id = $1
   AND (sqlc.narg(dep_type)::DEPENDENCY_TYPE IS NULL OR pd.dependency_type = sqlc.narg(dep_type)::DEPENDENCY_TYPE)
 ORDER BY pd.dependency_type, p.identifier;

@@ -874,10 +874,22 @@ SELECT
     p.ecosystem::text,
     pv.version,
     pd.package_version_id,
-    pd.package_id
+    pd.package_id,
+    COALESCE(att.value = 'true'::jsonb, false)::bool AS has_attestation,
+    COALESCE(oss.value = 'true'::jsonb, false)::bool AS has_oss_rebuild,
+    COALESCE(beh.value = 'true'::jsonb, false)::bool AS behavior_passed
 FROM project_dependencies pd
 JOIN packages p ON p.id = pd.package_id
 JOIN package_versions pv ON pv.id = pd.package_version_id
+LEFT JOIN package_version_tags att
+    ON att.package_version = pd.package_version_id
+    AND att.tag_type = (SELECT id FROM package_tag_types WHERE label = 'upstream_attestation')
+LEFT JOIN package_version_tags oss
+    ON oss.package_version = pd.package_version_id
+    AND oss.tag_type = (SELECT id FROM package_tag_types WHERE label = 'oss_rebuild')
+LEFT JOIN package_version_tags beh
+    ON beh.package_version = pd.package_version_id
+    AND beh.tag_type = (SELECT id FROM package_tag_types WHERE label = 'behavior_passed')
 WHERE pd.project_id = $1
   AND ($2::DEPENDENCY_TYPE IS NULL OR pd.dependency_type = $2::DEPENDENCY_TYPE)
 ORDER BY pd.dependency_type, p.identifier
@@ -897,9 +909,12 @@ type ListProjectDependenciesRow struct {
 	Version           string
 	PackageVersionID  int32
 	PackageID         int32
+	HasAttestation    bool
+	HasOssRebuild     bool
+	BehaviorPassed    bool
 }
 
-// Lists all dependencies for a project with package info and tag status.
+// Lists all dependencies for a project with package info and per-dep check statuses.
 // Optionally filtered by dependency type.
 func (q *Queries) ListProjectDependencies(ctx context.Context, arg ListProjectDependenciesParams) ([]ListProjectDependenciesRow, error) {
 	rows, err := q.db.Query(ctx, listProjectDependencies, arg.ProjectID, arg.DepType)
@@ -919,6 +934,9 @@ func (q *Queries) ListProjectDependencies(ctx context.Context, arg ListProjectDe
 			&i.Version,
 			&i.PackageVersionID,
 			&i.PackageID,
+			&i.HasAttestation,
+			&i.HasOssRebuild,
+			&i.BehaviorPassed,
 		); err != nil {
 			return nil, err
 		}

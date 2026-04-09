@@ -65,7 +65,7 @@ type Querier interface {
 	ListPackageVersions(ctx context.Context, packageID int32) ([]string, error)
 	// Poller queries
 	ListPackagesByEcosystem(ctx context.Context, ecosystem Ecosystem) ([]ListPackagesByEcosystemRow, error)
-	// Lists all dependencies for a project with package info and tag status.
+	// Lists all dependencies for a project with package info and per-dep check statuses.
 	// Optionally filtered by dependency type.
 	ListProjectDependencies(ctx context.Context, arg ListProjectDependenciesParams) ([]ListProjectDependenciesRow, error)
 	ListUserProjects(ctx context.Context, userID string) ([]UserProject, error)

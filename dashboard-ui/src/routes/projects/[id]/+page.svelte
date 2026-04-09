@@ -28,6 +28,7 @@
   let error = $state<string | null>(null);
 
   let typeFilter = $state<DependencyType | "">("");
+  let sortByChecks = $state<"asc" | "desc" | null>(null);
 
   async function loadProject() {
     loadingProject = true;
@@ -85,23 +86,44 @@
     }
   }
 
+  function checksPassedCount(dep: ProjectDependency): number {
+    return (
+      (dep.has_attestation ? 1 : 0) +
+      (dep.has_oss_rebuild ? 1 : 0) +
+      (dep.behavior_passed ? 1 : 0)
+    );
+  }
+
+  function toggleSort() {
+    if (sortByChecks === null) sortByChecks = "asc";
+    else if (sortByChecks === "asc") sortByChecks = "desc";
+    else sortByChecks = null;
+  }
+
   // Aggregate totals across direct + transitive rows.
   const totalDeps = $derived(summary.reduce((n, s) => n + s.total, 0));
-  const totalAttestation = $derived(
-    summary.reduce((n, s) => n + s.has_attestation, 0),
-  );
-  const totalOssRebuild = $derived(
-    summary.reduce((n, s) => n + s.has_oss_rebuild, 0),
-  );
-  const totalBehavior = $derived(
-    summary.reduce((n, s) => n + s.behavior_passed, 0),
-  );
   const directRow = $derived(
     summary.find((s) => s.dependency_type === "direct"),
   );
   const transitiveRow = $derived(
     summary.find((s) => s.dependency_type === "transitive"),
   );
+
+  // Count deps that fail ALL 3 checks (0 of 3 passed).
+  const totalFailedAll = $derived(
+    deps.filter((d) => checksPassedCount(d) === 0).length,
+  );
+
+  // Sorted deps list.
+  const sortedDeps = $derived.by(() => {
+    if (sortByChecks === null) return deps;
+    const sorted = [...deps];
+    sorted.sort((a, b) => {
+      const diff = checksPassedCount(a) - checksPassedCount(b);
+      return sortByChecks === "asc" ? diff : -diff;
+    });
+    return sorted;
+  });
 
   // Initial data load
   $effect(() => {
@@ -179,45 +201,17 @@
           </div>
         </div>
 
-        <div class="summary-card">
-          <div class="summary-icon-wrap summary-attestation">
-            <ShieldCheck class="summary-icon" />
-          </div>
-          <div class="summary-data">
-            <span class="summary-value">
-              {totalAttestation}<span class="summary-of">/{totalDeps}</span>
-            </span>
-            <span class="summary-label">Upstream Attestation</span>
-            <span class="summary-detail"> Provenance signatures verified </span>
-          </div>
-        </div>
-
-        <div class="summary-card">
-          <div class="summary-icon-wrap summary-rebuild">
-            <ShieldCheck class="summary-icon" />
-          </div>
-          <div class="summary-data">
-            <span class="summary-value">
-              {totalOssRebuild}<span class="summary-of">/{totalDeps}</span>
-            </span>
-            <span class="summary-label">OSS Rebuild</span>
-            <span class="summary-detail"> Reproducible build confirmed </span>
-          </div>
-        </div>
-
-        <div class="summary-card">
-          <div class="summary-icon-wrap summary-behavior">
+        <div class="summary-card" class:summary-card-danger={totalFailedAll > 0}>
+          <div class="summary-icon-wrap summary-failed">
             <ShieldAlert class="summary-icon" />
           </div>
           <div class="summary-data">
             <span class="summary-value">
-              {totalBehavior}<span class="summary-of"
-                >/{directRow?.total ?? 0}</span
-              >
+              {totalFailedAll}<span class="summary-of">/{totalDeps}</span>
             </span>
-            <span class="summary-label">Behavior Analysis</span>
+            <span class="summary-label">Failed All Checks</span>
             <span class="summary-detail">
-              Direct deps with clean behavior
+              No attestation, rebuild, or clean behavior
             </span>
           </div>
         </div>
@@ -255,11 +249,23 @@
                 <th>Package</th>
                 <th>Version</th>
                 <th>Type</th>
-                <th>Constraint</th>
+                <th>
+                  <button class="sort-btn" onclick={toggleSort}>
+                    Checks
+                    {#if sortByChecks === "asc"}
+                      <span class="sort-arrow">&#9650;</span>
+                    {:else if sortByChecks === "desc"}
+                      <span class="sort-arrow">&#9660;</span>
+                    {:else}
+                      <span class="sort-arrow sort-arrow-idle">&#9650;</span>
+                    {/if}
+                  </button>
+                </th>
               </tr>
             </thead>
             <tbody>
-              {#each deps as dep}
+              {#each sortedDeps as dep}
+                {@const passed = checksPassedCount(dep)}
                 <tr>
                   <td>
                     <span class="eco-pill">{dep.ecosystem}</span>
@@ -276,8 +282,16 @@
                       {dep.dependency_type}
                     </span>
                   </td>
-                  <td class="cell-secondary">
-                    {dep.version_constraint || "-"}
+                  <td>
+                    <span
+                      class="checks-badge"
+                      class:checks-none={passed === 0}
+                      class:checks-partial={passed > 0 && passed < 3}
+                      class:checks-all={passed === 3}
+                    >
+                      <ShieldCheck class="checks-icon" />
+                      {passed}/3
+                    </span>
                   </td>
                 </tr>
               {/each}
@@ -450,19 +464,14 @@
     color: #6366f1;
   }
 
-  .summary-attestation {
-    background: rgba(16, 185, 129, 0.1);
-    color: #10b981;
+  .summary-failed {
+    background: rgba(220, 38, 38, 0.1);
+    color: #dc2626;
   }
 
-  .summary-rebuild {
-    background: rgba(59, 130, 246, 0.1);
-    color: #3b82f6;
-  }
-
-  .summary-behavior {
-    background: rgba(245, 158, 11, 0.1);
-    color: #f59e0b;
+  .summary-card-danger {
+    border-color: rgba(220, 38, 38, 0.3);
+    background: rgba(220, 38, 38, 0.04);
   }
 
   .summary-data {
@@ -589,11 +598,6 @@
     font-size: 0.8rem;
   }
 
-  .cell-secondary {
-    color: var(--text-secondary);
-    font-size: 0.8rem;
-  }
-
   .eco-pill {
     display: inline-block;
     padding: 0.0625rem 0.4375rem;
@@ -628,5 +632,65 @@
   .type-transitive {
     background: rgba(107, 114, 128, 0.12);
     color: #6b7280;
+  }
+
+  /* Sort button in table header */
+  .sort-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    background: none;
+    border: none;
+    padding: 0;
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: color 0.15s;
+  }
+
+  .sort-btn:hover {
+    color: var(--text-primary);
+  }
+
+  .sort-arrow {
+    font-size: 0.65rem;
+    line-height: 1;
+  }
+
+  .sort-arrow-idle {
+    opacity: 0.3;
+  }
+
+  /* Checks badge in dependency table */
+  .checks-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.125rem 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border-radius: 999px;
+  }
+
+  .checks-badge :global(.checks-icon) {
+    width: 0.875rem;
+    height: 0.875rem;
+  }
+
+  .checks-none {
+    background: rgba(220, 38, 38, 0.1);
+    color: #dc2626;
+  }
+
+  .checks-partial {
+    background: rgba(245, 158, 11, 0.1);
+    color: #f59e0b;
+  }
+
+  .checks-all {
+    background: rgba(16, 185, 129, 0.1);
+    color: #10b981;
   }
 </style>

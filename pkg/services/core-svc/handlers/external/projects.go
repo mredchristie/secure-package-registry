@@ -547,6 +547,9 @@ func (h *ProjectHandler) ListDependencies(w http.ResponseWriter, r *http.Request
 			Ecosystem:      d.PEcosystem,
 			Version:        d.Version,
 			DependencyType: string(d.DependencyType),
+			HasAttestation: d.HasAttestation,
+			HasOssRebuild:  d.HasOssRebuild,
+			BehaviorPassed: d.BehaviorPassed,
 		}
 		if d.VersionConstraint.Valid {
 			item.VersionConstraint = d.VersionConstraint.String
