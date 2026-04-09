@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"git.duti.dev/secure-package-registry/internal/gen/coredb"
 	"git.duti.dev/secure-package-registry/internal/messages"
@@ -27,6 +28,7 @@ import (
 type ProjectHandler struct {
 	db        coredb.Querier
 	publisher message.Publisher
+	resolver  *npm.Resolver
 	verifier  *verification.Service
 	npmClient *npm.Client
 	log       zerolog.Logger
@@ -38,6 +40,7 @@ func NewProjectHandler(db coredb.Querier, publisher message.Publisher, verifier 
 	h := &ProjectHandler{
 		db:        db,
 		publisher: publisher,
+		resolver:  npm.NewResolver(npmClient),
 		verifier:  verifier,
 		npmClient: npmClient,
 		log:       logger.WithComponent("project-handler"),
@@ -112,10 +115,60 @@ func (h *ProjectHandler) UploadProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	for _, dep := range parsed.All {
-		// Resolve the version: lock files provide exact versions; package.json
-		// only has constraints (e.g. "^5.48.2") that must be resolved against
-		// the npm registry to find the highest matching release.
+	// --- Phase 1: Resolve direct dep constraints (package.json only) ---
+	var directDeps []lockfile.Dep
+	skipped := 0
+	for _, dep := range parsed.DirectDeps() {
+		if isNonStandardSpecifier(dep.Constraint) {
+			h.log.Warn().
+				Str("dep", dep.Name).
+				Str("specifier", dep.Constraint).
+				Msg("Skipping non-standard dependency specifier")
+			skipped++
+			continue
+		}
+
+		version := dep.Version
+		if version == "" && dep.Constraint != "" {
+			resolved, err := h.npmClient.ResolveConstraint(ctx, dep.Name, dep.Constraint)
+			if err != nil {
+				h.log.Warn().Err(err).
+					Str("dep", dep.Name).
+					Str("constraint", dep.Constraint).
+					Msg("Failed to resolve version constraint — skipping dependency")
+				skipped++
+				continue
+			}
+			version = resolved
+		}
+		if version == "" {
+			h.log.Warn().Str("dep", dep.Name).Msg("No version or constraint — skipping dependency")
+			skipped++
+			continue
+		}
+
+		directDeps = append(directDeps, lockfile.Dep{
+			Name:       dep.Name,
+			Version:    version,
+			Constraint: dep.Constraint,
+			Direct:     true,
+		})
+	}
+
+	// --- Phase 2: Expand transitive tree ---
+	var allDeps []lockfile.Dep
+	if parsed.SourceType == lockfile.SourcePackageJSON {
+		transitiveDeps := h.resolveTransitiveDeps(ctx, directDeps)
+		allDeps = make([]lockfile.Dep, 0, len(directDeps)+len(transitiveDeps))
+		allDeps = append(allDeps, directDeps...)
+		allDeps = append(allDeps, transitiveDeps...)
+	} else {
+		// Lock file already has the complete dependency set.
+		allDeps = parsed.All
+	}
+
+	// --- Phase 3: Store and trigger analysis ---
+	for _, dep := range allDeps {
 		version := dep.Version
 		if version == "" && dep.Constraint != "" {
 			resolved, err := h.npmClient.ResolveConstraint(ctx, dep.Name, dep.Constraint)
@@ -187,14 +240,111 @@ func (h *ProjectHandler) UploadProject(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	totalDeps := len(allDeps)
+	directCount := len(directDeps)
+	if parsed.SourceType != lockfile.SourcePackageJSON {
+		directCount = len(parsed.DirectDeps())
+	}
+
 	render.Status(r, http.StatusCreated)
 	render.JSON(w, r, UploadProjectResponse{
-		ID:         project.ID,
-		Name:       project.Name,
-		SourceType: project.SourceType,
-		TotalDeps:  len(parsed.All),
-		DirectDeps: len(parsed.DirectDeps()),
+		ID:             project.ID,
+		Name:           project.Name,
+		SourceType:     project.SourceType,
+		TotalDeps:      totalDeps,
+		DirectDeps:     directCount,
+		TransitiveDeps: totalDeps - directCount,
+		Skipped:        skipped,
 	})
+}
+
+// isNonStandardSpecifier returns true if the constraint string is a git URL,
+// GitHub shorthand, tarball URL, or local file path rather than a semver range.
+// These are skipped during resolution (see RFC 2026-04-09).
+func isNonStandardSpecifier(constraint string) bool {
+	if constraint == "" {
+		return false
+	}
+
+	// Git protocols.
+	for _, prefix := range []string{"git+", "git://", "git@"} {
+		if strings.HasPrefix(constraint, prefix) {
+			return true
+		}
+	}
+
+	// Tarball URLs.
+	if strings.HasPrefix(constraint, "http://") || strings.HasPrefix(constraint, "https://") {
+		return true
+	}
+
+	// Local file paths.
+	if strings.HasPrefix(constraint, "file:") {
+		return true
+	}
+
+	// GitHub shorthand: "user/repo" or "user/repo#ref".
+	// Must contain exactly one "/" with no spaces and no semver-range chars.
+	if strings.Contains(constraint, "/") &&
+		!strings.ContainsAny(constraint, " <>!=^~*|") {
+		parts := strings.SplitN(constraint, "#", 2)
+		segments := strings.Split(parts[0], "/")
+		if len(segments) == 2 && segments[0] != "" && segments[1] != "" {
+			return true
+		}
+	}
+
+	return false
+}
+
+// resolveTransitiveDeps resolves the full transitive dependency tree for each
+// direct dependency using the npm registry resolver. Returns only the transitive
+// deps (direct deps are excluded since they are already in the caller's list).
+func (h *ProjectHandler) resolveTransitiveDeps(ctx context.Context, directDeps []lockfile.Dep) []lockfile.Dep {
+	// Pre-populate seen set with direct deps to avoid duplicates and ensure
+	// direct type takes precedence.
+	seen := make(map[string]bool, len(directDeps))
+	for _, d := range directDeps {
+		seen[d.Name+"@"+d.Version] = true
+	}
+
+	var transitive []lockfile.Dep
+
+	for _, dep := range directDeps {
+		graph, err := h.resolver.Resolve(ctx, dep.Name, dep.Version)
+		if err != nil {
+			h.log.Warn().Err(err).
+				Str("dep", dep.Name+"@"+dep.Version).
+				Msg("Failed to resolve transitive deps — skipping tree")
+			continue
+		}
+
+		for key, node := range graph.Nodes {
+			if key == graph.Root {
+				continue // skip the direct dep itself
+			}
+			if node == nil {
+				continue // incomplete resolution (in-progress placeholder)
+			}
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+
+			transitive = append(transitive, lockfile.Dep{
+				Name:    node.Name,
+				Version: node.Version,
+				Direct:  false,
+			})
+		}
+	}
+
+	h.log.Info().
+		Int("direct", len(directDeps)).
+		Int("transitive", len(transitive)).
+		Msg("Resolved transitive dependency tree")
+
+	return transitive
 }
 
 // triggerBehavioralAnalysis creates a collection task and publishes a scan

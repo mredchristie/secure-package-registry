@@ -342,9 +342,13 @@ components:
                     type: integer
                 name:
                     type: string
+                skipped:
+                    type: integer
                 source_type:
                     type: string
                 total_deps:
+                    type: integer
+                transitive_deps:
                     type: integer
             type: object
 info:

@@ -90,11 +90,13 @@ type UploadProjectRequest struct {
 
 // UploadProjectResponse is the response body for UploadProject.
 type UploadProjectResponse struct {
-	ID         int32  `json:"id"`
-	Name       string `json:"name"`
-	SourceType string `json:"source_type"`
-	TotalDeps  int    `json:"total_deps"`
-	DirectDeps int    `json:"direct_deps"`
+	ID             int32  `json:"id"`
+	Name           string `json:"name"`
+	SourceType     string `json:"source_type"`
+	TotalDeps      int    `json:"total_deps"`
+	DirectDeps     int    `json:"direct_deps"`
+	TransitiveDeps int    `json:"transitive_deps"`
+	Skipped        int    `json:"skipped"`
 }
 
 // ProjectListItem is a single item returned by ListProjects.
