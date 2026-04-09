@@ -100,46 +100,64 @@ export interface ConnectionBehavior {
 // Public search types (used by /api/v1/svc/ endpoints)
 
 export interface PackageSummary {
+	ecosystem: Ecosystem;
 	identifier: string;
-	ecosystem: "npm" | "go" | "cargo" | "pypi";
 	latest_version: string;
-	description: string;
-	author: string;
-	updatedAgo: string;
-	trustScore: number;
-	tier: string;
-	tags: string[];
 }
 
 export interface SearchResult {
 	items: PackageSummary[];
+	page: number;
+	page_size: number;
+	total_count: number;
 }
 
 export interface PackageVersionDetail {
-	identifier: string;
 	ecosystem: string;
-	version: string;
+	identifier: string;
 	latest: boolean;
-	source: {
-		url: string;
-		tag: string;
-		commit: string;
-	};
-	trust_level: number;
 	maintainer_notes: string;
+	source: {
+		commit: string;
+		tag: string;
+		url: string;
+	};
 	tags: Array<{
+		data: string; // base64 encoded JSON
 		label: string;
 		value_type: "boolean" | "integer" | "float";
-		data: string; // base64 encoded JSON
 	}>;
+	trust_level: number;
+	version: string;
 }
 
 export interface VerifyResponse {
 	ecosystem: string;
 	identifier: string;
-	version: string;
-	upstream_attestation: boolean;
 	oss_rebuild: boolean;
+	upstream_attestation: boolean;
+	version: string;
+}
+
+// Version list types (public endpoint)
+
+export interface VersionSummary {
+	behavior_passed: boolean;
+	has_attestation: boolean;
+	has_oss_rebuild: boolean;
+	latest: boolean;
+	source: {
+		commit: string;
+		tag: string;
+		url: string;
+	};
+	version: string;
+}
+
+export interface VersionListResult {
+	ecosystem: Ecosystem;
+	identifier: string;
+	versions: VersionSummary[];
 }
 
 // Project dependency tracking types
@@ -155,23 +173,23 @@ export interface Project {
 }
 
 export interface ProjectDependency {
-	id: number;
-	identifier: string;
-	ecosystem: string;
-	version: string;
+	behavior_passed: boolean;
 	dependency_type: DependencyType;
-	version_constraint?: string;
+	ecosystem: string;
 	has_attestation: boolean;
 	has_oss_rebuild: boolean;
-	behavior_passed: boolean;
+	id: number;
+	identifier: string;
+	version: string;
+	version_constraint?: string;
 }
 
 export interface ProjectSummaryRow {
+	behavior_passed: number;
 	dependency_type: DependencyType;
-	total: number;
 	has_attestation: number;
 	has_oss_rebuild: number;
-	behavior_passed: number;
+	total: number;
 }
 
 export interface ListProjectsResponse {

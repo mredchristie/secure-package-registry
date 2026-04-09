@@ -2,25 +2,23 @@
   import { searchAPI } from "$lib/api";
   import type { PackageSummary, Ecosystem } from "$lib/types/api";
   import { page } from "$app/state";
-  import { onMount } from "svelte";
-
-  function trustColor(score: number): string {
-    if (score >= 90) return "trust-high";
-    if (score >= 70) return "trust-medium";
-    return "trust-low";
-  }
 
   // Initialize from URL params
   const initialQ = page.url.searchParams.get("q") ?? "";
   const initialEcosystem =
     (page.url.searchParams.get("ecosystem") as Ecosystem | "") ?? "";
+  const initialPage = parseInt(page.url.searchParams.get("page") ?? "1", 10);
 
   let searchQuery = $state(initialQ);
   let selectedEcosystem = $state<"" | Ecosystem>(initialEcosystem);
   let searchResults = $state<PackageSummary[]>([]);
+  let totalCount = $state(0);
+  let currentPage = $state(initialPage);
+  let pageSize = $state(20);
   let loading = $state(false);
   let error = $state("");
   let hasSearched = $state(false);
+  let debounceTimer = $state<ReturnType<typeof setTimeout> | null>(null);
 
   const ecosystems = [
     { label: "All Ecosystems", value: "" as const },
@@ -30,65 +28,71 @@
     { label: "PyPI", value: "pypi" as const },
   ];
 
-  const filteredResults = $derived(
-    searchResults.filter((pkg) => {
-      const query = searchQuery.trim().toLowerCase();
+  const totalPages = $derived(Math.max(1, Math.ceil(totalCount / pageSize)));
 
-      const matchesQuery =
-        !query ||
-        pkg.identifier.toLowerCase().includes(query) ||
-        (pkg.description ?? "").toLowerCase().includes(query) ||
-        (pkg.tags ?? []).some((tag) => tag.toLowerCase().includes(query));
-
-      const matchesEcosystem =
-        !selectedEcosystem || pkg.ecosystem === selectedEcosystem;
-
-      return matchesQuery && matchesEcosystem;
-    }),
-  );
-
-  // Update URL with current search state
   function updateUrlParams() {
     const params = new URLSearchParams();
     if (searchQuery.trim()) params.set("q", searchQuery.trim());
     if (selectedEcosystem) params.set("ecosystem", selectedEcosystem);
+    if (currentPage > 1) params.set("page", currentPage.toString());
 
     const newUrl = `${window.location.pathname}${params.toString() ? "?" + params.toString() : ""}`;
     window.history.replaceState({}, "", newUrl);
   }
 
-  async function searchPackages() {
+  async function searchPackages(resetPage = false) {
+    if (resetPage) currentPage = 1;
     loading = true;
     error = "";
     hasSearched = true;
-
-    // Update URL when search is performed
     updateUrlParams();
 
     try {
       const data = await searchAPI.search(
         searchQuery.trim(),
         selectedEcosystem || undefined,
+        currentPage,
+        pageSize,
       );
-
       searchResults = data.items ?? [];
+      totalCount = data.total_count;
     } catch {
       error = "Failed to search packages. Please try again.";
       searchResults = [];
+      totalCount = 0;
     } finally {
       loading = false;
     }
   }
 
+  function handleInput() {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => searchPackages(true), 300);
+  }
+
   function handleKeydown(event: KeyboardEvent) {
     if (event.key === "Enter") {
-      searchPackages();
+      if (debounceTimer) clearTimeout(debounceTimer);
+      searchPackages(true);
     }
   }
 
-  // Auto-search on mount if URL has query params
-  onMount(() => {
-    if (initialQ || initialEcosystem) {
+  function handleEcosystemChange() {
+    searchPackages(true);
+  }
+
+  function goToPage(p: number) {
+    currentPage = p;
+    searchPackages();
+  }
+
+  function packageUrl(pkg: PackageSummary): string {
+    return `/packages/${pkg.ecosystem}/${encodeURIComponent(pkg.identifier)}/${pkg.latest_version}`;
+  }
+
+  // Auto-search on mount if URL has query params, otherwise show all
+  $effect(() => {
+    if (!hasSearched) {
       searchPackages();
     }
   });
@@ -99,287 +103,199 @@
     <div class="error-banner">{error}</div>
   {/if}
 
-  <div class="search-card">
-    <div class="search-row">
-      <input
-        type="text"
-        bind:value={searchQuery}
-        onkeydown={handleKeydown}
-        placeholder="Search packages…"
-        class="search-input"
-      />
-
-      <select bind:value={selectedEcosystem} class="eco-select">
-        {#each ecosystems as ecosystem}
-          <option value={ecosystem.value}>{ecosystem.label}</option>
-        {/each}
-      </select>
-
-      <button onclick={searchPackages} disabled={loading} class="btn-search">
-        {loading ? "Searching…" : "Search"}
-      </button>
-    </div>
-
-    {#if hasSearched && !loading}
-      <div class="results-meta">
-        {filteredResults.length} package{filteredResults.length !== 1
-          ? "s"
-          : ""} found
-      </div>
-    {/if}
+  <div class="search-bar">
+    <input
+      type="text"
+      bind:value={searchQuery}
+      oninput={handleInput}
+      onkeydown={handleKeydown}
+      placeholder="Search packages…"
+      class="search-input"
+    />
+    <select
+      bind:value={selectedEcosystem}
+      onchange={handleEcosystemChange}
+      class="eco-select"
+    >
+      {#each ecosystems as ecosystem}
+        <option value={ecosystem.value}>{ecosystem.label}</option>
+      {/each}
+    </select>
   </div>
+
+  {#if hasSearched && !loading}
+    <div class="results-meta">
+      {totalCount} package{totalCount !== 1 ? "s" : ""}
+      {#if searchQuery.trim()}
+        matching "{searchQuery.trim()}"
+      {/if}
+    </div>
+  {/if}
 
   {#if loading}
     <div class="state-msg">Searching…</div>
-  {:else if hasSearched && filteredResults.length === 0}
+  {:else if hasSearched && searchResults.length === 0}
     <div class="state-msg">No packages matched your query.</div>
-  {:else if filteredResults.length > 0}
-    <ul class="cards">
-      {#each filteredResults as pkg}
+  {:else if searchResults.length > 0}
+    <ul class="results">
+      {#each searchResults as pkg}
         <li>
-          <a
-            class="card-link"
-            href={`/detail-page/${encodeURIComponent(pkg.identifier)}?ecosystem=${pkg.ecosystem}&version=${pkg.latest_version}`}
-          >
-            <article class="card">
-              <div class="card-header">
-                <div class="card-id-row">
-                  <span class="card-identifier">{pkg.identifier}</span>
-                  <span class="eco-badge {pkg.ecosystem}">{pkg.ecosystem}</span>
-                </div>
-
-                <span class="trust-pill {trustColor(pkg.trustScore ?? 0)}">
-                  {pkg.trustScore ?? 0}
-                </span>
-              </div>
-
-              {#if pkg.description}
-                <p class="result-description">{pkg.description}</p>
-              {/if}
-
-              {#if pkg.tags?.length}
-                <div class="result-tags">
-                  {#each pkg.tags as tag}
-                    <span class="result-tag">{tag}</span>
-                  {/each}
-                </div>
-              {/if}
-
-              <div class="result-meta">
-                <span>v{pkg.latest_version}</span>
-
-                {#if pkg.author}
-                  <span>{pkg.author}</span>
-                {/if}
-
-                {#if pkg.updatedAgo}
-                  <span>{pkg.updatedAgo}</span>
-                {/if}
-
-                {#if pkg.tier}
-                  <span class="result-tier">{pkg.tier}</span>
-                {/if}
-              </div>
-            </article>
+          <a class="result-link" href={packageUrl(pkg)}>
+            <div class="result-row">
+              <span class="result-name">{pkg.identifier}</span>
+              <span class="eco-badge {pkg.ecosystem}">{pkg.ecosystem}</span>
+              <span class="version-text">v{pkg.latest_version}</span>
+            </div>
           </a>
         </li>
       {/each}
     </ul>
+
+    {#if totalPages > 1}
+      <nav class="pagination">
+        <button
+          onclick={() => goToPage(currentPage - 1)}
+          disabled={currentPage <= 1}
+          class="page-btn"
+        >
+          Previous
+        </button>
+        <span class="page-info">
+          Page {currentPage} of {totalPages}
+        </span>
+        <button
+          onclick={() => goToPage(currentPage + 1)}
+          disabled={currentPage >= totalPages}
+          class="page-btn"
+        >
+          Next
+        </button>
+      </nav>
+    {/if}
   {/if}
 </main>
 
 <style>
   main {
-    max-width: 1000px;
+    max-width: 800px;
     margin: 0 auto;
     padding: 1.5rem 1.25rem 4rem;
   }
 
   .error-banner {
     margin-bottom: 1rem;
-    padding: 1rem;
-    border-radius: 12px;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
     border: 1px solid rgba(220, 38, 38, 0.2);
     background: rgba(220, 38, 38, 0.08);
     color: #dc2626;
+    font-size: 0.875rem;
   }
 
-  .search-card {
+  .search-bar {
+    display: flex;
+    gap: 0.5rem;
     margin-bottom: 1rem;
   }
 
-  .search-row {
-    display: grid;
-    grid-template-columns: 1fr 180px auto auto;
-    gap: 0.625rem;
-    align-items: center;
-  }
-
-  .search-input,
-  .eco-select {
+  .search-input {
+    flex: 1;
     padding: 0.625rem 0.875rem;
-    font-size: 0.93rem;
-    border-radius: 10px;
+    font-size: 0.9rem;
+    border-radius: 8px;
     border: 1px solid var(--border);
     background: var(--bg-secondary);
     color: var(--text-primary);
     outline: none;
-    transition: border-color 0.2s;
+    transition: border-color 0.15s;
   }
 
   .search-input::placeholder {
     color: var(--text-secondary);
   }
 
-  .search-input:focus,
+  .search-input:focus {
+    border-color: var(--accent);
+  }
+
+  .eco-select {
+    padding: 0.625rem 0.75rem;
+    font-size: 0.875rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    outline: none;
+    cursor: pointer;
+  }
+
   .eco-select:focus {
     border-color: var(--accent);
   }
 
-  .btn-search,
-  .btn-add {
-    padding: 0.625rem 1rem;
-    font-size: 0.9rem;
-    font-weight: 700;
-    border-radius: 10px;
-    cursor: pointer;
-    white-space: nowrap;
-  }
-
-  .btn-search {
-    border: 1px solid var(--accent);
-    background: var(--accent);
-    color: white;
-  }
-
-  .btn-search:hover:not(:disabled) {
-    background: var(--accent-hover);
-    border-color: var(--accent-hover);
-  }
-
-  .btn-search:disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
-  }
-
-  .btn-add {
-    border: 1px solid var(--accent);
-    background: transparent;
-    color: var(--accent);
-  }
-
-  .btn-add:hover {
-    background: rgba(29, 78, 216, 0.08);
-  }
-
   .results-meta {
-    margin-top: 0.75rem;
-    font-size: 0.88rem;
+    font-size: 0.8rem;
     color: var(--text-secondary);
     font-weight: 600;
+    margin-bottom: 0.75rem;
   }
 
   .state-msg {
     text-align: center;
     color: var(--text-secondary);
     padding: 3rem 0;
-    font-size: 0.95rem;
+    font-size: 0.9rem;
   }
 
-  .cards {
+  .results {
     list-style: none;
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
     padding: 0;
     margin: 0;
+    border: 1px solid var(--card-border);
+    border-radius: 10px;
+    background: var(--card-bg);
+    overflow: hidden;
   }
 
-  .card-link {
+  .results li + li {
+    border-top: 1px solid var(--border);
+  }
+
+  .result-link {
     display: block;
     text-decoration: none;
     color: inherit;
+    padding: 0.75rem 1rem;
+    transition: background 0.1s;
   }
 
-  .card {
-    border-radius: 14px;
-    border: 1px solid var(--card-border);
-    background: var(--card-bg);
-    padding: 1.5rem;
+  .result-link:hover {
+    background: var(--bg-secondary);
   }
 
-  .card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 0.75rem;
-    margin-bottom: 0.5rem;
-  }
-
-  .card-id-row {
+  .result-row {
     display: flex;
     align-items: center;
-    gap: 0.6rem;
-    min-width: 0;
+    gap: 0.625rem;
   }
 
-  .card-identifier {
-    font-weight: 800;
-    font-size: 1.05rem;
+  .result-name {
+    font-weight: 700;
+    font-size: 0.95rem;
     color: var(--text-primary);
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .result-description {
-    margin: 0 0 0.625rem;
-    font-size: 0.875rem;
-    line-height: 1.625;
-    color: var(--text-secondary);
-  }
-
-  .result-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.375rem;
-    margin-bottom: 0.75rem;
-  }
-
-  .result-tag {
-    padding: 0.125rem 0.625rem;
-    font-size: 0.76rem;
-    font-weight: 700;
-    border-radius: 999px;
-    border: 1px solid var(--border);
-    background: var(--bg-secondary);
-    color: var(--text-secondary);
-  }
-
-  .result-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1rem;
-    padding-top: 0.625rem;
-    border-top: 1px solid var(--border);
-    font-size: 0.82rem;
-    font-weight: 600;
-    color: var(--text-secondary);
-  }
-
-  .result-tier {
-    margin-left: auto;
-    font-weight: 700;
-    color: var(--accent);
-  }
-
   .eco-badge {
     display: inline-block;
-    padding: 0.125rem 0.5rem;
-    font-size: 0.7rem;
+    padding: 0.1rem 0.4rem;
+    font-size: 0.65rem;
     font-weight: 800;
     text-transform: uppercase;
-    letter-spacing: 0.025em;
+    letter-spacing: 0.02em;
     border-radius: 999px;
     border: 1px solid;
     flex-shrink: 0;
@@ -409,36 +325,57 @@
     background: #eff6ff;
   }
 
-  .trust-pill {
+  .version-text {
+    margin-left: auto;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-family:
+      ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
     flex-shrink: 0;
-    min-width: 2.8rem;
-    padding: 0.125rem 0.625rem;
-    font-size: 0.875rem;
-    font-weight: 800;
-    border-radius: 999px;
-    border: 1.5px solid;
-    text-align: center;
-    background: transparent;
   }
 
-  .trust-high {
-    color: #16a34a;
-    border-color: #22c55e;
+  .pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
+    margin-top: 1rem;
   }
 
-  .trust-medium {
-    color: #f59e0b;
-    border-color: #fbbf24;
+  .page-btn {
+    padding: 0.4rem 0.85rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    cursor: pointer;
+    transition:
+      background 0.15s,
+      border-color 0.15s;
   }
 
-  .trust-low {
-    color: #dc2626;
-    border-color: #ef4444;
+  .page-btn:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .page-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .page-info {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
   }
 
   @media (max-width: 640px) {
-    .search-row {
-      grid-template-columns: 1fr;
+    .search-bar {
+      flex-direction: column;
     }
   }
 </style>

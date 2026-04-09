@@ -18,6 +18,7 @@ import type {
 	TriggerScanResponse,
 	UploadProjectResponse,
 	VerifyResponse,
+	VersionListResult,
 } from "$lib/types/api.js";
 
 const API_BASE = "/api/v1";
@@ -213,10 +214,27 @@ export const searchAPI = {
 		);
 	},
 
-	search: (query?: string, ecosystem?: string): Promise<SearchResult> => {
+	listVersions: (
+		ecosystem: string,
+		identifier: string,
+	): Promise<VersionListResult> => {
+		const safeIdentifier = encodeURIComponent(identifier);
+		return fetchJSON(
+			`${API_BASE}/svc/packages/${ecosystem}/${safeIdentifier}/versions`,
+		);
+	},
+
+	search: (
+		query?: string,
+		ecosystem?: string,
+		page?: number,
+		pageSize?: number,
+	): Promise<SearchResult> => {
 		const params = new URLSearchParams();
 		if (query?.trim()) params.append("q", query);
 		if (ecosystem) params.append("ecosystem", ecosystem);
+		if (page) params.append("page", page.toString());
+		if (pageSize) params.append("page_size", pageSize.toString());
 
 		const queryString = params.toString();
 		const url = queryString
