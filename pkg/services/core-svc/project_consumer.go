@@ -209,6 +209,15 @@ func handleProjectProcessing(
 			continue
 		}
 
+		// Update the package's latest_version to reflect the current version.
+		if err := queries.UpdatePackageLatestVersion(ctx, coredb.UpdatePackageLatestVersionParams{
+			ID:            pkgID,
+			LatestVersion: pgtype.Text{String: version, Valid: true},
+		}); err != nil {
+			l.Error().Err(err).Str("dep", dep.Name+"@"+version).Msg("Failed to update package latest version")
+			continue
+		}
+
 		// Determine dependency type.
 		depType := coredb.DependencyTypeTransitive
 		if dep.Direct {
