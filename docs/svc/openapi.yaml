@@ -40,10 +40,16 @@ components:
             type: object
         DependencyListItem:
             properties:
+                behavior_passed:
+                    type: boolean
                 dependency_type:
                     type: string
                 ecosystem:
                     type: string
+                has_attestation:
+                    type: boolean
+                has_oss_rebuild:
+                    type: boolean
                 id:
                     format: int32
                     type: integer

@@ -554,7 +554,7 @@ const insertPackage = `-- name: InsertPackage :one
 INSERT INTO packages (identifier, ecosystem, latest_version)
 VALUES ($1, $2, $3)
 ON CONFLICT (identifier) DO UPDATE SET
-    latest_version = EXCLUDED.latest_version,
+    latest_version = COALESCE(EXCLUDED.latest_version, packages.latest_version),
     updated_at = CURRENT_TIMESTAMP
 RETURNING id
 `

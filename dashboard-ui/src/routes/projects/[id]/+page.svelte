@@ -201,7 +201,10 @@
           </div>
         </div>
 
-        <div class="summary-card" class:summary-card-danger={totalFailedAll > 0}>
+        <div
+          class="summary-card"
+          class:summary-card-danger={totalFailedAll > 0}
+        >
           <div class="summary-icon-wrap summary-failed">
             <ShieldAlert class="summary-icon" />
           </div>
