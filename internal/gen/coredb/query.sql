@@ -276,29 +276,50 @@ RETURNING "id";
 
 -- name: InsertProject :one
 -- Creates or updates a user project. On conflict (same user+name), updates
--- the source_type and updated_at timestamp.
-INSERT INTO user_projects (user_id, name, source_type)
-VALUES ($1, $2, $3)
+-- the source_type, stores the raw file for async processing, resets status
+-- to pending, and bumps the generation counter.
+INSERT INTO user_projects (user_id, name, source_type, status, source_file, generation)
+VALUES ($1, $2, $3, 'pending', $4, 1)
 ON CONFLICT (user_id, name) DO UPDATE SET
     source_type = EXCLUDED.source_type,
-    updated_at = CURRENT_TIMESTAMP
-RETURNING id, user_id, name, source_type, created_at, updated_at;
+    status      = 'pending',
+    source_file = EXCLUDED.source_file,
+    generation  = user_projects.generation + 1,
+    updated_at  = CURRENT_TIMESTAMP
+RETURNING id, user_id, name, source_type, status, source_file, generation, created_at, updated_at;
 
 -- name: GetProject :one
-SELECT id, user_id, name, source_type, created_at, updated_at
+SELECT id, user_id, name, source_type, status, generation, created_at, updated_at
 FROM user_projects
 WHERE id = $1;
 
 -- name: GetProjectByUserAndName :one
-SELECT id, user_id, name, source_type, created_at, updated_at
+SELECT id, user_id, name, source_type, status, generation, created_at, updated_at
 FROM user_projects
 WHERE user_id = $1 AND name = $2;
 
 -- name: ListUserProjects :many
-SELECT id, user_id, name, source_type, created_at, updated_at
+SELECT id, user_id, name, source_type, status, generation, created_at, updated_at
 FROM user_projects
 WHERE user_id = $1
 ORDER BY updated_at DESC;
+
+-- name: GetProjectForProcessing :one
+-- Fetches the project with its raw source file for background processing.
+-- Used by the consumer to retrieve the file to parse and resolve.
+SELECT id, user_id, name, source_type, status, source_file, generation, created_at, updated_at
+FROM user_projects
+WHERE id = $1;
+
+-- name: FinishProjectProcessing :exec
+-- Marks a project as complete or failed after async processing, clears the
+-- raw source_file, and only applies if the generation matches (stale-message guard).
+UPDATE user_projects
+SET status      = $2,
+    source_file = NULL,
+    updated_at  = CURRENT_TIMESTAMP
+WHERE id = $1
+  AND generation = $3;
 
 -- name: DeleteProject :exec
 DELETE FROM user_projects

@@ -37,6 +37,28 @@ func (q *Queries) DeleteProjectDependencies(ctx context.Context, projectID int32
 	return err
 }
 
+const finishProjectProcessing = `-- name: FinishProjectProcessing :exec
+UPDATE user_projects
+SET status      = $2,
+    source_file = NULL,
+    updated_at  = CURRENT_TIMESTAMP
+WHERE id = $1
+  AND generation = $3
+`
+
+type FinishProjectProcessingParams struct {
+	ID         int32
+	Status     string
+	Generation int32
+}
+
+// Marks a project as complete or failed after async processing, clears the
+// raw source_file, and only applies if the generation matches (stale-message guard).
+func (q *Queries) FinishProjectProcessing(ctx context.Context, arg FinishProjectProcessingParams) error {
+	_, err := q.db.Exec(ctx, finishProjectProcessing, arg.ID, arg.Status, arg.Generation)
+	return err
+}
+
 const getAPIKeyOwner = `-- name: GetAPIKeyOwner :one
 
 SELECT "referenceId" FROM apikey
@@ -287,19 +309,32 @@ func (q *Queries) GetPackageVersionTags(ctx context.Context, arg GetPackageVersi
 }
 
 const getProject = `-- name: GetProject :one
-SELECT id, user_id, name, source_type, created_at, updated_at
+SELECT id, user_id, name, source_type, status, generation, created_at, updated_at
 FROM user_projects
 WHERE id = $1
 `
 
-func (q *Queries) GetProject(ctx context.Context, id int32) (UserProject, error) {
+type GetProjectRow struct {
+	ID         int32
+	UserID     string
+	Name       string
+	SourceType string
+	Status     string
+	Generation int32
+	CreatedAt  pgtype.Timestamptz
+	UpdatedAt  pgtype.Timestamptz
+}
+
+func (q *Queries) GetProject(ctx context.Context, id int32) (GetProjectRow, error) {
 	row := q.db.QueryRow(ctx, getProject, id)
-	var i UserProject
+	var i GetProjectRow
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
 		&i.Name,
 		&i.SourceType,
+		&i.Status,
+		&i.Generation,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -307,7 +342,7 @@ func (q *Queries) GetProject(ctx context.Context, id int32) (UserProject, error)
 }
 
 const getProjectByUserAndName = `-- name: GetProjectByUserAndName :one
-SELECT id, user_id, name, source_type, created_at, updated_at
+SELECT id, user_id, name, source_type, status, generation, created_at, updated_at
 FROM user_projects
 WHERE user_id = $1 AND name = $2
 `
@@ -317,14 +352,52 @@ type GetProjectByUserAndNameParams struct {
 	Name   string
 }
 
-func (q *Queries) GetProjectByUserAndName(ctx context.Context, arg GetProjectByUserAndNameParams) (UserProject, error) {
+type GetProjectByUserAndNameRow struct {
+	ID         int32
+	UserID     string
+	Name       string
+	SourceType string
+	Status     string
+	Generation int32
+	CreatedAt  pgtype.Timestamptz
+	UpdatedAt  pgtype.Timestamptz
+}
+
+func (q *Queries) GetProjectByUserAndName(ctx context.Context, arg GetProjectByUserAndNameParams) (GetProjectByUserAndNameRow, error) {
 	row := q.db.QueryRow(ctx, getProjectByUserAndName, arg.UserID, arg.Name)
+	var i GetProjectByUserAndNameRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.SourceType,
+		&i.Status,
+		&i.Generation,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getProjectForProcessing = `-- name: GetProjectForProcessing :one
+SELECT id, user_id, name, source_type, status, source_file, generation, created_at, updated_at
+FROM user_projects
+WHERE id = $1
+`
+
+// Fetches the project with its raw source file for background processing.
+// Used by the consumer to retrieve the file to parse and resolve.
+func (q *Queries) GetProjectForProcessing(ctx context.Context, id int32) (UserProject, error) {
+	row := q.db.QueryRow(ctx, getProjectForProcessing, id)
 	var i UserProject
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
 		&i.Name,
 		&i.SourceType,
+		&i.Status,
+		&i.SourceFile,
+		&i.Generation,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -614,31 +687,44 @@ func (q *Queries) InsertPackageVersion(ctx context.Context, arg InsertPackageVer
 
 const insertProject = `-- name: InsertProject :one
 
-INSERT INTO user_projects (user_id, name, source_type)
-VALUES ($1, $2, $3)
+INSERT INTO user_projects (user_id, name, source_type, status, source_file, generation)
+VALUES ($1, $2, $3, 'pending', $4, 1)
 ON CONFLICT (user_id, name) DO UPDATE SET
     source_type = EXCLUDED.source_type,
-    updated_at = CURRENT_TIMESTAMP
-RETURNING id, user_id, name, source_type, created_at, updated_at
+    status      = 'pending',
+    source_file = EXCLUDED.source_file,
+    generation  = user_projects.generation + 1,
+    updated_at  = CURRENT_TIMESTAMP
+RETURNING id, user_id, name, source_type, status, source_file, generation, created_at, updated_at
 `
 
 type InsertProjectParams struct {
 	UserID     string
 	Name       string
 	SourceType string
+	SourceFile []byte
 }
 
 // Project queries
 // Creates or updates a user project. On conflict (same user+name), updates
-// the source_type and updated_at timestamp.
+// the source_type, stores the raw file for async processing, resets status
+// to pending, and bumps the generation counter.
 func (q *Queries) InsertProject(ctx context.Context, arg InsertProjectParams) (UserProject, error) {
-	row := q.db.QueryRow(ctx, insertProject, arg.UserID, arg.Name, arg.SourceType)
+	row := q.db.QueryRow(ctx, insertProject,
+		arg.UserID,
+		arg.Name,
+		arg.SourceType,
+		arg.SourceFile,
+	)
 	var i UserProject
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
 		&i.Name,
 		&i.SourceType,
+		&i.Status,
+		&i.SourceFile,
+		&i.Generation,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -949,26 +1035,39 @@ func (q *Queries) ListProjectDependencies(ctx context.Context, arg ListProjectDe
 }
 
 const listUserProjects = `-- name: ListUserProjects :many
-SELECT id, user_id, name, source_type, created_at, updated_at
+SELECT id, user_id, name, source_type, status, generation, created_at, updated_at
 FROM user_projects
 WHERE user_id = $1
 ORDER BY updated_at DESC
 `
 
-func (q *Queries) ListUserProjects(ctx context.Context, userID string) ([]UserProject, error) {
+type ListUserProjectsRow struct {
+	ID         int32
+	UserID     string
+	Name       string
+	SourceType string
+	Status     string
+	Generation int32
+	CreatedAt  pgtype.Timestamptz
+	UpdatedAt  pgtype.Timestamptz
+}
+
+func (q *Queries) ListUserProjects(ctx context.Context, userID string) ([]ListUserProjectsRow, error) {
 	rows, err := q.db.Query(ctx, listUserProjects, userID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []UserProject
+	var items []ListUserProjectsRow
 	for rows.Next() {
-		var i UserProject
+		var i ListUserProjectsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.UserID,
 			&i.Name,
 			&i.SourceType,
+			&i.Status,
+			&i.Generation,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {

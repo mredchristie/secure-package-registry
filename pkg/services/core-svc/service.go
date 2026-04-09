@@ -97,6 +97,25 @@ func Start(ctx context.Context, deps *services.Deps) error {
 		return fmt.Errorf("subscribing to collection completions: %w", err)
 	}
 
+	// Subscriber for spr.project.processing.requested (async project uploads).
+	projectSub, err := amqp.NewSubscriber(
+		amqp.NewDurableQueueConfig(deps.Config.RabbitMQURL),
+		watermill.NewStdLogger(false, false),
+	)
+	if err != nil {
+		return fmt.Errorf("creating project-processing subscriber: %w", err)
+	}
+	defer func() {
+		if cerr := projectSub.Close(); cerr != nil {
+			log.Warn().Err(cerr).Msg("Failed to close project-processing subscriber")
+		}
+	}()
+
+	projectCh, err := projectSub.Subscribe(ctx, "spr.project.processing.requested")
+	if err != nil {
+		return fmt.Errorf("subscribing to project processing requests: %w", err)
+	}
+
 	// Create MinIO client for admin artifact downloads.
 	minioCfg := deps.Config.MinIO
 	minioClient, err := sprminio.NewClient(ctx, sprminio.Config{
@@ -114,6 +133,7 @@ func Start(ctx context.Context, deps *services.Deps) error {
 	npmClient := npm.NewClient(deps.Config.NPM)
 	ossClient := ossrebuild.NewClient(deps.Config.OSSRebuild)
 	verifier := verification.NewService(queries, npmClient, ossClient)
+	npmResolver := npm.NewResolver(npmClient)
 
 	// Load the Gitea config from Valkey for the registry account.
 	giteaConfig, err := deps.Valkey.GetGiteaConfig(ctx)
@@ -138,6 +158,13 @@ func Start(ctx context.Context, deps *services.Deps) error {
 	go func() {
 		if err := consumeCollectionCompleted(ctx, queries, minioClient, completedCh); err != nil {
 			completedErr <- err
+		}
+	}()
+
+	projectErr := make(chan error, 1)
+	go func() {
+		if err := consumeProjectProcessing(ctx, queries, publisher, npmClient, npmResolver, verifier, projectCh); err != nil {
+			projectErr <- err
 		}
 	}()
 
@@ -170,6 +197,8 @@ func Start(ctx context.Context, deps *services.Deps) error {
 		return fmt.Errorf("package-updated consumer: %w", err)
 	case err := <-completedErr:
 		return fmt.Errorf("collection-completed consumer: %w", err)
+	case err := <-projectErr:
+		return fmt.Errorf("project-processing consumer: %w", err)
 	}
 
 	shutdownCtx := context.Background()

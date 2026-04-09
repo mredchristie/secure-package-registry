@@ -351,6 +351,9 @@ type UserProject struct {
 	UserID     string
 	Name       string
 	SourceType string
+	Status     string
+	SourceFile []byte
+	Generation int32
 	CreatedAt  pgtype.Timestamptz
 	UpdatedAt  pgtype.Timestamptz
 }

@@ -89,14 +89,11 @@ type UploadProjectRequest struct {
 // --- Project: responses ---
 
 // UploadProjectResponse is the response body for UploadProject.
+// Returns immediately with status "pending" — processing happens asynchronously.
 type UploadProjectResponse struct {
-	ID             int32  `json:"id"`
-	Name           string `json:"name"`
-	SourceType     string `json:"source_type"`
-	TotalDeps      int    `json:"total_deps"`
-	DirectDeps     int    `json:"direct_deps"`
-	TransitiveDeps int    `json:"transitive_deps"`
-	Skipped        int    `json:"skipped"`
+	ID     int32  `json:"id"`
+	Name   string `json:"name"`
+	Status string `json:"status"`
 }
 
 // ProjectListItem is a single item returned by ListProjects.
@@ -104,6 +101,7 @@ type ProjectListItem struct {
 	ID         int32  `json:"id"`
 	Name       string `json:"name"`
 	SourceType string `json:"source_type"`
+	Status     string `json:"status"`
 	CreatedAt  string `json:"created_at"`
 	UpdatedAt  string `json:"updated_at"`
 }
@@ -118,6 +116,7 @@ type GetProjectResponse struct {
 	ID         int32  `json:"id"`
 	Name       string `json:"name"`
 	SourceType string `json:"source_type"`
+	Status     string `json:"status"`
 	CreatedAt  string `json:"created_at,omitempty"`
 	UpdatedAt  string `json:"updated_at,omitempty"`
 }

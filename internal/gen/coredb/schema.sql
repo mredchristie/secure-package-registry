@@ -178,6 +178,9 @@ CREATE TABLE user_projects (
     user_id     TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
     name        TEXT NOT NULL,
     source_type TEXT NOT NULL,
+    status      TEXT NOT NULL DEFAULT 'pending',
+    source_file BYTEA,
+    generation  INT NOT NULL DEFAULT 1,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (user_id, name)

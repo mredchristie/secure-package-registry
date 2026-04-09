@@ -12,6 +12,9 @@ type Querier interface {
 	DeleteProject(ctx context.Context, arg DeleteProjectParams) error
 	// Bulk delete all dependencies for a project (used before re-inserting on re-upload).
 	DeleteProjectDependencies(ctx context.Context, projectID int32) error
+	// Marks a project as complete or failed after async processing, clears the
+	// raw source_file, and only applies if the generation matches (stale-message guard).
+	FinishProjectProcessing(ctx context.Context, arg FinishProjectProcessingParams) error
 	// Auth queries
 	GetAPIKeyOwner(ctx context.Context, key string) (string, error)
 	GetCollectionTask(ctx context.Context, id int32) (CollectionTask, error)
@@ -23,8 +26,11 @@ type Querier interface {
 	// Looks up a package version row ID by ecosystem, identifier, and version.
 	GetPackageVersionID(ctx context.Context, arg GetPackageVersionIDParams) (int32, error)
 	GetPackageVersionTags(ctx context.Context, arg GetPackageVersionTagsParams) ([]GetPackageVersionTagsRow, error)
-	GetProject(ctx context.Context, id int32) (UserProject, error)
-	GetProjectByUserAndName(ctx context.Context, arg GetProjectByUserAndNameParams) (UserProject, error)
+	GetProject(ctx context.Context, id int32) (GetProjectRow, error)
+	GetProjectByUserAndName(ctx context.Context, arg GetProjectByUserAndNameParams) (GetProjectByUserAndNameRow, error)
+	// Fetches the project with its raw source file for background processing.
+	// Used by the consumer to retrieve the file to parse and resolve.
+	GetProjectForProcessing(ctx context.Context, id int32) (UserProject, error)
 	// Aggregated stats for a project, grouped by dependency type.
 	// Returns total count plus counts of deps with each boolean tag set to true.
 	GetProjectSummary(ctx context.Context, projectID int32) ([]GetProjectSummaryRow, error)
@@ -52,7 +58,8 @@ type Querier interface {
 	InsertPackageVersion(ctx context.Context, arg InsertPackageVersionParams) (int32, error)
 	// Project queries
 	// Creates or updates a user project. On conflict (same user+name), updates
-	// the source_type and updated_at timestamp.
+	// the source_type, stores the raw file for async processing, resets status
+	// to pending, and bumps the generation counter.
 	InsertProject(ctx context.Context, arg InsertProjectParams) (UserProject, error)
 	// Inserts a single project dependency. ON CONFLICT ignores duplicates.
 	InsertProjectDependency(ctx context.Context, arg InsertProjectDependencyParams) error
@@ -68,7 +75,7 @@ type Querier interface {
 	// Lists all dependencies for a project with package info and per-dep check statuses.
 	// Optionally filtered by dependency type.
 	ListProjectDependencies(ctx context.Context, arg ListProjectDependenciesParams) ([]ListProjectDependenciesRow, error)
-	ListUserProjects(ctx context.Context, userID string) ([]UserProject, error)
+	ListUserProjects(ctx context.Context, userID string) ([]ListUserProjectsRow, error)
 	// Resets a failed/cancelled task back to pending for retry.
 	ResetCollectionTask(ctx context.Context, id int32) error
 	SearchPackages(ctx context.Context, arg SearchPackagesParams) ([]SearchPackagesRow, error)
