@@ -54,7 +54,7 @@ type Querier interface {
 	// Returns the new row. If a task already exists for this combination,
 	// does nothing and returns nothing (caller checks sql.ErrNoRows).
 	InsertCollectionTask(ctx context.Context, arg InsertCollectionTaskParams) (InsertCollectionTaskRow, error)
-	InsertPackage(ctx context.Context, arg InsertPackageParams) (int32, error)
+	InsertPackage(ctx context.Context, arg InsertPackageParams) (InsertPackageRow, error)
 	InsertPackageTag(ctx context.Context, arg InsertPackageTagParams) error
 	InsertPackageVersion(ctx context.Context, arg InsertPackageVersionParams) (int32, error)
 	// Project queries

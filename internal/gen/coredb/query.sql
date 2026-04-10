@@ -51,7 +51,7 @@ VALUES ($1, $2, $3)
 ON CONFLICT (identifier) DO UPDATE SET
     latest_version = COALESCE(EXCLUDED.latest_version, packages.latest_version),
     updated_at = CURRENT_TIMESTAMP
-RETURNING id;
+RETURNING id, (xmax = 0) AS inserted;
 
 -- name: InsertPackageVersion :one
 INSERT INTO package_versions (package_id, version, source_url)

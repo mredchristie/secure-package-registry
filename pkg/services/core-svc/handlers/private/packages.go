@@ -2,9 +2,7 @@ package private
 
 import (
 	"bytes"
-	"context"
 	"encoding/gob"
-	"errors"
 	"net/http"
 
 	"git.duti.dev/secure-package-registry/internal/gen/coredb"
@@ -14,7 +12,6 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
-	"github.com/jackc/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/rs/zerolog"
 )
@@ -70,40 +67,30 @@ func (h *PackageHandler) CreatePackage(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	packageID, err := h.db.InsertPackage(ctx, coredb.InsertPackageParams{
+	result, err := h.db.InsertPackage(ctx, coredb.InsertPackageParams{
 		Identifier:    req.Identifier,
 		Ecosystem:     ecosystem,
 		LatestVersion: pgtype.Text{Valid: false},
 	})
-
-	alreadyExists := false
 	if err != nil {
-		if isDuplicateKeyError(err) {
-			existingPkg, getErr := h.getExistingPackage(ctx, ecosystem, req.Identifier)
-			if getErr != nil {
-				h.log.Error().Err(getErr).Str("identifier", req.Identifier).Msg("Failed to get existing package")
-				render.Status(r, http.StatusInternalServerError)
-				render.JSON(w, r, map[string]string{"error": "failed to check existing package"})
-				return
-			}
-			packageID = existingPkg.ID
-			alreadyExists = true
-			h.log.Info().
-				Int32("id", packageID).
-				Str("identifier", req.Identifier).
-				Msg("Package already exists")
-		} else {
-			h.log.Error().Err(err).Str("identifier", req.Identifier).Msg("Failed to insert package")
-			render.Status(r, http.StatusInternalServerError)
-			render.JSON(w, r, map[string]string{"error": "failed to create package"})
-			return
-		}
+		h.log.Error().Err(err).Str("identifier", req.Identifier).Msg("Failed to insert package")
+		render.Status(r, http.StatusInternalServerError)
+		render.JSON(w, r, map[string]string{"error": "failed to create package"})
+		return
+	}
+
+	alreadyExists := !result.Inserted
+	if alreadyExists {
+		h.log.Info().
+			Int32("id", result.ID).
+			Str("identifier", req.Identifier).
+			Msg("Package already exists")
 	}
 
 	if err := h.publishPackageRequested(req.Identifier, req.Ecosystem); err != nil {
 		h.log.Error().
 			Err(err).
-			Int32("id", packageID).
+			Int32("id", result.ID).
 			Str("identifier", req.Identifier).
 			Msg("Failed to publish package requested event")
 	}
@@ -115,42 +102,11 @@ func (h *PackageHandler) CreatePackage(w http.ResponseWriter, r *http.Request) {
 
 	render.Status(r, status)
 	render.JSON(w, r, CreatePackageResponse{
-		ID:            packageID,
+		ID:            result.ID,
 		Identifier:    req.Identifier,
 		Ecosystem:     req.Ecosystem,
 		AlreadyExists: alreadyExists,
 	})
-}
-
-func (h *PackageHandler) getExistingPackage(ctx context.Context, ecosystem coredb.Ecosystem, identifier string) (*coredb.Package, error) {
-	packages, err := h.db.ListPackagesByEcosystem(ctx, ecosystem)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, pkg := range packages {
-		if pkg.Identifier == identifier {
-			return &coredb.Package{
-				ID:            pkg.ID,
-				Identifier:    pkg.Identifier,
-				Ecosystem:     pkg.Ecosystem,
-				LatestVersion: pkg.LatestVersion,
-			}, nil
-		}
-	}
-
-	return nil, errors.New("package not found")
-}
-
-func isDuplicateKeyError(err error) bool {
-	if err == nil {
-		return false
-	}
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) {
-		return pgErr.Code == "23505"
-	}
-	return false
 }
 
 func (h *PackageHandler) publishPackageRequested(identifier, ecosystem string) error {

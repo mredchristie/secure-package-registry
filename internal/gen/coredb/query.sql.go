@@ -648,7 +648,7 @@ VALUES ($1, $2, $3)
 ON CONFLICT (identifier) DO UPDATE SET
     latest_version = COALESCE(EXCLUDED.latest_version, packages.latest_version),
     updated_at = CURRENT_TIMESTAMP
-RETURNING id
+RETURNING id, (xmax = 0) AS inserted
 `
 
 type InsertPackageParams struct {
@@ -657,11 +657,16 @@ type InsertPackageParams struct {
 	LatestVersion pgtype.Text
 }
 
-func (q *Queries) InsertPackage(ctx context.Context, arg InsertPackageParams) (int32, error) {
+type InsertPackageRow struct {
+	ID       int32
+	Inserted bool
+}
+
+func (q *Queries) InsertPackage(ctx context.Context, arg InsertPackageParams) (InsertPackageRow, error) {
 	row := q.db.QueryRow(ctx, insertPackage, arg.Identifier, arg.Ecosystem, arg.LatestVersion)
-	var id int32
-	err := row.Scan(&id)
-	return id, err
+	var i InsertPackageRow
+	err := row.Scan(&i.ID, &i.Inserted)
+	return i, err
 }
 
 const insertPackageTag = `-- name: InsertPackageTag :exec

@@ -124,13 +124,13 @@ func (h *AdminHandler) AddPackage(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 
-	packageID, err := h.db.InsertPackage(ctx, coredb.InsertPackageParams{
+	result, err := h.db.InsertPackage(ctx, coredb.InsertPackageParams{
 		Identifier:    req.Identifier,
 		Ecosystem:     ecosystem,
 		LatestVersion: pgtype.Text{Valid: false},
 	})
 
-	alreadyExists := false
+	alreadyExists := !result.Inserted
 	if err != nil {
 		h.log.Error().Err(err).Str("identifier", req.Identifier).Msg("Failed to insert package")
 		render.Status(r, http.StatusInternalServerError)
@@ -150,7 +150,7 @@ func (h *AdminHandler) AddPackage(w http.ResponseWriter, r *http.Request) {
 
 	render.Status(r, status)
 	render.JSON(w, r, AddPackageResponse{
-		ID:            packageID,
+		ID:            result.ID,
 		Identifier:    req.Identifier,
 		Ecosystem:     req.Ecosystem,
 		AlreadyExists: alreadyExists,

@@ -188,7 +188,7 @@ func handleProjectProcessing(
 		}
 
 		// Upsert the package.
-		pkgID, err := queries.InsertPackage(ctx, coredb.InsertPackageParams{
+		pkgResult, err := queries.InsertPackage(ctx, coredb.InsertPackageParams{
 			Identifier:    dep.Name,
 			Ecosystem:     coredb.EcosystemNpm,
 			LatestVersion: pgtype.Text{},
@@ -197,6 +197,7 @@ func handleProjectProcessing(
 			l.Error().Err(err).Str("dep", dep.Name).Msg("Failed to upsert package")
 			continue
 		}
+		pkgID := pkgResult.ID
 
 		// Upsert the package version.
 		pvID, err := queries.InsertPackageVersion(ctx, coredb.InsertPackageVersionParams{
