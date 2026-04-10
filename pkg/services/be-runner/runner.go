@@ -373,9 +373,9 @@ func extractJSONL(zipData []byte) ([]byte, error) {
 			if err != nil {
 				return nil, fmt.Errorf("opening %s in zip: %w", f.Name, err)
 			}
-			defer func() { _ = rc.Close() }()
 
 			data, err := io.ReadAll(rc)
+			_ = rc.Close()
 			if err != nil {
 				return nil, fmt.Errorf("reading %s from zip: %w", f.Name, err)
 			}
