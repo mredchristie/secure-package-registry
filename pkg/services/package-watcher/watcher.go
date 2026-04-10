@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/gob"
 	"fmt"
+	"sync"
 
 	"git.duti.dev/secure-package-registry/internal/messages"
 	"git.duti.dev/secure-package-registry/pkg/logger"
@@ -18,6 +19,7 @@ import (
 var log = logger.WithComponent("package-watcher")
 
 type watcher struct {
+	mu sync.RWMutex
 	// Ecosystem -> Package Name -> Version
 	watchedPackages map[string]map[string]string
 	subscriber      *amqp.Subscriber
@@ -62,7 +64,7 @@ func NewWatcher(deps *services.Deps) (*watcher, error) {
 	}, nil
 }
 
-func (w *watcher) Start(ctx context.Context) (err error) {
+func (w *watcher) Start(ctx context.Context) error {
 	requestsCh, err := w.subscriber.Subscribe(context.Background(), "spr.package.requested")
 	if err != nil {
 		return fmt.Errorf("failed to subscribe to package requests: %w", err)
@@ -96,18 +98,27 @@ func (w *watcher) Start(ctx context.Context) (err error) {
 			}
 		}
 	}()
+	repErrCh := make(chan error, 1)
 	go func() {
 		if repErr := w.listenNPMReplicate(ctx); repErr != nil {
-			err = fmt.Errorf("NPM replicate listener error: %w", repErr)
-			log.Error().Err(err).Msg("NPM replicate listener stopped with error")
+			log.Error().Err(repErr).Msg("NPM replicate listener stopped with error")
+			repErrCh <- fmt.Errorf("NPM replicate listener error: %w", repErr)
 		} else {
 			log.Info().Msg("NPM replicate listener stopped gracefully")
+			repErrCh <- nil
 		}
 	}()
-	return
+	select {
+	case <-ctx.Done():
+		return nil
+	case err := <-repErrCh:
+		return err
+	}
 }
 
 func (w *watcher) insertWatchedPackage(ecosystem, identifier, version string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	if _, exists := w.watchedPackages[ecosystem]; !exists {
 		w.watchedPackages[ecosystem] = make(map[string]string)
 	}
@@ -126,7 +137,7 @@ func (w *watcher) checkVersionAndPublish(ctx context.Context, ecosystem, identif
 	if err != nil {
 		return fmt.Errorf("failed to fetch latest version for %s: %w", identifier, err)
 	}
-	currentVersion := w.watchedPackages[ecosystem][identifier]
+	currentVersion, _ := w.currentWatchedVersion(ecosystem, identifier)
 	if latestVersion == currentVersion {
 		return nil
 	}
@@ -148,7 +159,9 @@ func (w *watcher) checkVersionAndPublish(ctx context.Context, ecosystem, identif
 	return w.publisher.Publish("spr.package.updated", message.NewMessage(watermill.NewUUID(), buf.Bytes()))
 }
 
-func (w watcher) currentWatchedVersion(ecosystem, identifier string) (string, bool) {
+func (w *watcher) currentWatchedVersion(ecosystem, identifier string) (string, bool) {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
 	if pkgs, exists := w.watchedPackages[ecosystem]; exists {
 		version, exists := pkgs[identifier]
 		return version, exists
