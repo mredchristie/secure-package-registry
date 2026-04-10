@@ -367,6 +367,12 @@ func (h *AdminHandler) GetBehavior(w http.ResponseWriter, r *http.Request) {
 	// Raw: behavior/{eco}/{pkg}/{ver}/{src}/behavior.jsonl
 	// Deduped: behavior/{eco}/{pkg}/{ver}/{src}/behavior-deduped.json
 	rawKey := task.ArtifactKey.String
+	if !strings.HasSuffix(rawKey, "behavior.jsonl") {
+		h.log.Error().Str("key", rawKey).Msg("Unexpected artifact key format")
+		render.Status(r, http.StatusInternalServerError)
+		render.JSON(w, r, map[string]string{"error": "unexpected artifact key format"})
+		return
+	}
 	dedupedKey := strings.TrimSuffix(rawKey, "behavior.jsonl") + "behavior-deduped.json"
 
 	data, err := h.minio.GetObject(ctx, dedupedKey)
@@ -428,6 +434,12 @@ func (h *AdminHandler) GetBehaviorRaw(w http.ResponseWriter, r *http.Request) {
 	// Derive the raw JSON key from the raw artifact key.
 	// Raw JSONL: behavior/{eco}/{pkg}/{ver}/{src}/behavior.jsonl
 	// Raw tree:  behavior/{eco}/{pkg}/{ver}/{src}/behavior-raw.json
+	if !strings.HasSuffix(task.ArtifactKey.String, "behavior.jsonl") {
+		h.log.Error().Str("key", task.ArtifactKey.String).Msg("Unexpected artifact key format")
+		render.Status(r, http.StatusInternalServerError)
+		render.JSON(w, r, map[string]string{"error": "unexpected artifact key format"})
+		return
+	}
 	rawKey := strings.TrimSuffix(task.ArtifactKey.String, "behavior.jsonl") + "behavior-raw.json"
 
 	data, err := h.minio.GetObject(ctx, rawKey)

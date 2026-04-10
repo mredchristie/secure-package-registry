@@ -451,6 +451,9 @@ func evaluateBehavior(
 	// Derive the deduped JSON key from the raw artifact key.
 	// Raw:     behavior/{eco}/{pkg}/{ver}/{src}/behavior.jsonl
 	// Deduped: behavior/{eco}/{pkg}/{ver}/{src}/behavior-deduped.json
+	if !strings.HasSuffix(completed.ArtifactKey, "behavior.jsonl") {
+		return fmt.Errorf("unexpected artifact key format %q: expected suffix behavior.jsonl", completed.ArtifactKey)
+	}
 	dedupedKey := strings.TrimSuffix(completed.ArtifactKey, "behavior.jsonl") + "behavior-deduped.json"
 
 	data, err := minio.GetObject(ctx, dedupedKey)
