@@ -63,6 +63,8 @@ type Querier interface {
 	// to pending, and bumps the generation counter.
 	InsertProject(ctx context.Context, arg InsertProjectParams) (UserProject, error)
 	// Inserts a single project dependency. ON CONFLICT ignores duplicates.
+	// checked_at is set NOW() for direct deps (analysis triggered immediately),
+	// NULL for transitive deps (will be set when parent completes analysis).
 	InsertProjectDependency(ctx context.Context, arg InsertProjectDependencyParams) error
 	InsertTagType(ctx context.Context, arg InsertTagTypeParams) (int32, error)
 	// User/Organisation Queries
@@ -77,6 +79,7 @@ type Querier interface {
 	ListPackagesByEcosystem(ctx context.Context, ecosystem Ecosystem) ([]ListPackagesByEcosystemRow, error)
 	// Lists all dependencies for a project with package info and per-dep check statuses.
 	// Optionally filtered by dependency type.
+	// Check fields are NULL when checked_at is NULL (not yet checked), otherwise boolean.
 	ListProjectDependencies(ctx context.Context, arg ListProjectDependenciesParams) ([]ListProjectDependenciesRow, error)
 	ListUserProjects(ctx context.Context, userID string) ([]ListUserProjectsRow, error)
 	// Resets a failed/cancelled task back to pending for retry.

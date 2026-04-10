@@ -173,11 +173,11 @@ export interface Project {
 }
 
 export interface ProjectDependency {
-	behavior_passed: boolean;
+	behavior_passed: boolean | null;
 	dependency_type: DependencyType;
 	ecosystem: string;
-	has_attestation: boolean;
-	has_oss_rebuild: boolean;
+	has_attestation: boolean | null;
+	has_oss_rebuild: boolean | null;
 	id: number;
 	identifier: string;
 	version: string;

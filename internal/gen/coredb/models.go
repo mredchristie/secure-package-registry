@@ -321,6 +321,7 @@ type ProjectDependency struct {
 	PackageVersionID  int32
 	DependencyType    DependencyType
 	VersionConstraint pgtype.Text
+	CheckedAt         pgtype.Timestamptz
 	CreatedAt         pgtype.Timestamptz
 }
 

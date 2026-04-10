@@ -86,11 +86,21 @@
     }
   }
 
+  // Count of passed checks (only counts true, excludes null/pending).
   function checksPassedCount(dep: ProjectDependency): number {
     return (
-      (dep.has_attestation ? 1 : 0) +
-      (dep.has_oss_rebuild ? 1 : 0) +
-      (dep.behavior_passed ? 1 : 0)
+      (dep.has_attestation === true ? 1 : 0) +
+      (dep.has_oss_rebuild === true ? 1 : 0) +
+      (dep.behavior_passed === true ? 1 : 0)
+    );
+  }
+
+  // Count of pending checks (null values).
+  function checksPendingCount(dep: ProjectDependency): number {
+    return (
+      (dep.has_attestation === null ? 1 : 0) +
+      (dep.has_oss_rebuild === null ? 1 : 0) +
+      (dep.behavior_passed === null ? 1 : 0)
     );
   }
 
@@ -109,9 +119,9 @@
     summary.find((s) => s.dependency_type === "transitive"),
   );
 
-  // Count deps that fail ALL 3 checks (0 of 3 passed).
+  // Count deps that fail ALL 3 checks (0 of 3 passed, no pending).
   const totalFailedAll = $derived(
-    deps.filter((d) => checksPassedCount(d) === 0).length,
+    deps.filter((d) => checksPendingCount(d) === 0 && checksPassedCount(d) === 0).length,
   );
 
   // Sorted deps list.
@@ -269,6 +279,7 @@
             <tbody>
               {#each sortedDeps as dep}
                 {@const passed = checksPassedCount(dep)}
+                {@const pending = checksPendingCount(dep)}
                 <tr>
                   <td>
                     <span class="eco-pill">{dep.ecosystem}</span>
@@ -286,15 +297,22 @@
                     </span>
                   </td>
                   <td>
-                    <span
-                      class="checks-badge"
-                      class:checks-none={passed === 0}
-                      class:checks-partial={passed > 0 && passed < 3}
-                      class:checks-all={passed === 3}
-                    >
-                      <ShieldCheck class="checks-icon" />
-                      {passed}/3
-                    </span>
+                    {#if pending > 0}
+                      <span class="checks-badge checks-pending">
+                        <Loader2 class="checks-icon checks-icon-spin" />
+                        Pending
+                      </span>
+                    {:else}
+                      <span
+                        class="checks-badge"
+                        class:checks-none={passed === 0}
+                        class:checks-partial={passed > 0 && passed < 3}
+                        class:checks-all={passed === 3}
+                      >
+                        <ShieldCheck class="checks-icon" />
+                        {passed}/3
+                      </span>
+                    {/if}
                   </td>
                 </tr>
               {/each}
@@ -695,5 +713,14 @@
   .checks-all {
     background: rgba(16, 185, 129, 0.1);
     color: #10b981;
+  }
+
+  .checks-pending {
+    background: rgba(107, 114, 128, 0.1);
+    color: #6b7280;
+  }
+
+  .checks-pending :global(.checks-icon) {
+    animation: spin 1s linear infinite;
   }
 </style>

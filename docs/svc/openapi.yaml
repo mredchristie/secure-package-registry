@@ -41,14 +41,17 @@ components:
         DependencyListItem:
             properties:
                 behavior_passed:
+                    nullable: true
                     type: boolean
                 dependency_type:
                     type: string
                 ecosystem:
                     type: string
                 has_attestation:
+                    nullable: true
                     type: boolean
                 has_oss_rebuild:
+                    nullable: true
                     type: boolean
                 id:
                     format: int32

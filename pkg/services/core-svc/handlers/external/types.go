@@ -122,6 +122,7 @@ type GetProjectResponse struct {
 }
 
 // DependencyListItem is a single item returned by ListDependencies.
+// Check fields are nil when checks haven't been run yet, otherwise true/false.
 type DependencyListItem struct {
 	ID                int32  `json:"id"`
 	Identifier        string `json:"identifier"`
@@ -129,9 +130,9 @@ type DependencyListItem struct {
 	Version           string `json:"version"`
 	DependencyType    string `json:"dependency_type"`
 	VersionConstraint string `json:"version_constraint,omitempty"`
-	HasAttestation    bool   `json:"has_attestation"`
-	HasOssRebuild     bool   `json:"has_oss_rebuild"`
-	BehaviorPassed    bool   `json:"behavior_passed"`
+	HasAttestation    *bool  `json:"has_attestation"`
+	HasOssRebuild     *bool  `json:"has_oss_rebuild"`
+	BehaviorPassed    *bool  `json:"behavior_passed"`
 }
 
 // DependencyListResponse is the response body for ListDependencies.

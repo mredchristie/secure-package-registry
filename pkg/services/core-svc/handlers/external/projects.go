@@ -290,9 +290,9 @@ func (h *ProjectHandler) ListDependencies(w http.ResponseWriter, r *http.Request
 			Ecosystem:      d.PEcosystem,
 			Version:        d.Version,
 			DependencyType: string(d.DependencyType),
-			HasAttestation: d.HasAttestation,
-			HasOssRebuild:  d.HasOssRebuild,
-			BehaviorPassed: d.BehaviorPassed,
+			HasAttestation: boolPtrFromInterface(d.HasAttestation),
+			HasOssRebuild:  boolPtrFromInterface(d.HasOssRebuild),
+			BehaviorPassed: boolPtrFromInterface(d.BehaviorPassed),
 		}
 		if d.VersionConstraint.Valid {
 			item.VersionConstraint = d.VersionConstraint.String
@@ -391,4 +391,16 @@ func (h *ProjectHandler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// boolPtrFromInterface converts a database interface{} (bool or nil) to *bool.
+// It handles the nullable boolean fields from sqlc queries.
+func boolPtrFromInterface(v interface{}) *bool {
+	if v == nil {
+		return nil
+	}
+	if b, ok := v.(bool); ok {
+		return &b
+	}
+	return nil
 }

@@ -197,6 +197,7 @@ CREATE TABLE project_dependencies (
     package_version_id  INT NOT NULL REFERENCES package_versions(id),
     dependency_type     DEPENDENCY_TYPE NOT NULL,
     version_constraint  TEXT,
+    checked_at          TIMESTAMPTZ,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (project_id, package_id, package_version_id)
 );
