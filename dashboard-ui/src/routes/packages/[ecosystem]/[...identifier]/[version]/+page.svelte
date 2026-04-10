@@ -68,7 +68,6 @@
   async function loadData() {
     loading = true;
     error = "";
-    verifyResult = null;
 
     try {
       // If version is "latest", resolve to the actual latest version number
@@ -101,7 +100,18 @@
   async function runVerification() {
     verifying = true;
     try {
-      verifyResult = await searchAPI.verify(ecosystem, identifier, version);
+      const result = await searchAPI.verify(ecosystem, identifier, version);
+      // Merge with OR logic: once true, stays true (per-version)
+      verifyResult = {
+        ecosystem: result.ecosystem,
+        identifier: result.identifier,
+        version: result.version,
+        upstream_attestation:
+          result.upstream_attestation ||
+          verifyResult?.upstream_attestation ||
+          false,
+        oss_rebuild: result.oss_rebuild || verifyResult?.oss_rebuild || false,
+      };
     } catch {
       // Silently fail — verification is best-effort
     } finally {
@@ -112,6 +122,13 @@
   $effect(() => {
     if (ecosystem && identifier && version) {
       loadData();
+    }
+  });
+
+  // Reset verification state when switching versions
+  $effect(() => {
+    if (version) {
+      verifyResult = null;
     }
   });
 </script>

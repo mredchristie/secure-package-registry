@@ -121,7 +121,9 @@
 
   // Count deps that fail ALL 3 checks (0 of 3 passed, no pending).
   const totalFailedAll = $derived(
-    deps.filter((d) => checksPendingCount(d) === 0 && checksPassedCount(d) === 0).length,
+    deps.filter(
+      (d) => checksPendingCount(d) === 0 && checksPassedCount(d) === 0,
+    ).length,
   );
 
   // Sorted deps list.
