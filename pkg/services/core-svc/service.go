@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"git.duti.dev/secure-package-registry/internal/gen/coredb"
 	"git.duti.dev/secure-package-registry/internal/messages"
@@ -201,7 +202,8 @@ func Start(ctx context.Context, deps *services.Deps) error {
 		return fmt.Errorf("project-processing consumer: %w", err)
 	}
 
-	shutdownCtx := context.Background()
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 	var shutdownErr error
 	if err := externalServer.Stop(shutdownCtx); err != nil {
 		log.Error().Err(err).Msg("Failed to stop external server")
