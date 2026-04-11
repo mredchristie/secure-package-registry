@@ -119,12 +119,14 @@ func pgtypeInt4ToInt32(i pgtype.Int4) int32 {
 
 // VersionSummary represents a version in a version list with verification status
 type VersionSummary struct {
-	Version        string `json:"version"`
-	Latest         bool   `json:"latest"`
-	Source         Source `json:"source"`
-	HasAttestation bool   `json:"has_attestation"`
-	HasOSSRebuild  bool   `json:"has_oss_rebuild"`
-	BehaviorPassed bool   `json:"behavior_passed"`
+	Version          string  `json:"version"`
+	Latest           bool    `json:"latest"`
+	Source           Source  `json:"source"`
+	HasAttestation   bool    `json:"has_attestation"`
+	HasOSSRebuild    bool    `json:"has_oss_rebuild"`
+	BehaviorPassed   bool    `json:"behavior_passed"`
+	ManuallyApproved *bool   `json:"manually_approved"`
+	ReviewComment    *string `json:"review_comment"`
 }
 
 // VersionListResult holds a list of version summaries for a package
@@ -132,6 +134,37 @@ type VersionListResult struct {
 	Identifier string           `json:"identifier"`
 	Ecosystem  Ecosystem        `json:"ecosystem" enum:"npm,go,cargo,pypi"`
 	Versions   []VersionSummary `json:"versions"`
+}
+
+// boolPtrFromJSONB converts a JSONB value to *bool.
+// Returns nil if the input is nil or not a valid boolean.
+func boolPtrFromJSONB(data []byte) *bool {
+	if data == nil {
+		return nil
+	}
+	s := string(data)
+	if s == "true" {
+		return func() *bool { v := true; return &v }()
+	}
+	if s == "false" {
+		return func() *bool { v := false; return &v }()
+	}
+	return nil
+}
+
+// stringPtrFromJSONB converts a JSONB value to *string.
+// Returns nil if the input is nil.
+// JSONB text values are stored as quoted strings, so we strip the outer quotes.
+func stringPtrFromJSONB(data []byte) *string {
+	if data == nil {
+		return nil
+	}
+	s := string(data)
+	// JSONB text values are stored as "quoted" strings
+	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
+		s = s[1 : len(s)-1]
+	}
+	return &s
 }
 
 // ListVersionsPublic returns all versions for a package with their verification tags
@@ -154,9 +187,11 @@ func (c *Client) ListVersionsPublic(ctx context.Context, ecosystem Ecosystem, id
 				Tag:    pgtypeTextToString(row.SourceTag),
 				Commit: pgtypeTextToString(row.SourceCommitHash),
 			},
-			HasAttestation: row.HasAttestation,
-			HasOSSRebuild:  row.HasOssRebuild,
-			BehaviorPassed: row.BehaviorPassed,
+			HasAttestation:   row.HasAttestation,
+			HasOSSRebuild:    row.HasOssRebuild,
+			BehaviorPassed:   row.BehaviorPassed,
+			ManuallyApproved: boolPtrFromJSONB(row.ManuallyApproved),
+			ReviewComment:    stringPtrFromJSONB(row.ReviewComment),
 		})
 	}
 

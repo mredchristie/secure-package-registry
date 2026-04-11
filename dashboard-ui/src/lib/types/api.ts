@@ -146,6 +146,8 @@ export interface VersionSummary {
 	has_attestation: boolean;
 	has_oss_rebuild: boolean;
 	latest: boolean;
+	manually_approved: boolean | null;
+	review_comment: string | null;
 	source: {
 		commit: string;
 		tag: string;

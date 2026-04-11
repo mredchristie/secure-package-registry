@@ -1055,7 +1055,15 @@ SELECT
     COALESCE((SELECT pvt.value = 'true'
      FROM package_version_tags pvt
      JOIN package_tag_types ptt ON ptt.id = pvt.tag_type
-     WHERE pvt.package_version = pv.id AND ptt.label = 'behavior_passed'), false)::bool AS behavior_passed
+     WHERE pvt.package_version = pv.id AND ptt.label = 'behavior_passed'), false)::bool AS behavior_passed,
+    (SELECT pvt.value
+     FROM package_version_tags pvt
+     JOIN package_tag_types ptt ON ptt.id = pvt.tag_type
+     WHERE pvt.package_version = pv.id AND ptt.label = 'manually_approved') AS manually_approved,
+    (SELECT pvt.value
+     FROM package_version_tags pvt
+     JOIN package_tag_types ptt ON ptt.id = pvt.tag_type
+     WHERE pvt.package_version = pv.id AND ptt.label = 'review_comment') AS review_comment
 FROM package_versions pv
 JOIN packages p ON p.id = pv.package_id
 WHERE p.ecosystem = $1
@@ -1077,6 +1085,8 @@ type ListPackageVersionsPublicRow struct {
 	HasAttestation   bool
 	HasOssRebuild    bool
 	BehaviorPassed   bool
+	ManuallyApproved []byte
+	ReviewComment    []byte
 }
 
 // Lists all versions for a package by ecosystem+identifier, with their verification tags.
@@ -1098,6 +1108,8 @@ func (q *Queries) ListPackageVersionsPublic(ctx context.Context, arg ListPackage
 			&i.HasAttestation,
 			&i.HasOssRebuild,
 			&i.BehaviorPassed,
+			&i.ManuallyApproved,
+			&i.ReviewComment,
 		); err != nil {
 			return nil, err
 		}

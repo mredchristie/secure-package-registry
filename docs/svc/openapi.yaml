@@ -426,6 +426,12 @@ components:
                     type: boolean
                 latest:
                     type: boolean
+                manually_approved:
+                    nullable: true
+                    type: boolean
+                review_comment:
+                    nullable: true
+                    type: string
                 source:
                     $ref: '#/components/schemas/Source'
                 version:

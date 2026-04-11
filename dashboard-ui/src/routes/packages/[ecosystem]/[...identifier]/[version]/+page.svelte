@@ -20,33 +20,40 @@
   let verifying = $state(false);
   let error = $state("");
 
-  function decodeTagValue(data: string): string {
-    try {
-      const parsed = JSON.parse(atob(data));
-      if (parsed === null) return "null";
-      if (typeof parsed === "object") return JSON.stringify(parsed);
-      return String(parsed);
-    } catch {
-      return data;
-    }
-  }
-
   // Count how many checks pass (0-3): attestation, oss rebuild, behavior
+  // with special handling for manual approval overrides
   function checksPassedCount(
     v: VersionSummary | null,
     verify: VerifyResponse | null,
   ): number {
     if (!v && !verify) return 0;
-    let count = 0;
-    if (verify) {
-      if (verify.upstream_attestation) count++;
-      if (verify.oss_rebuild) count++;
-    } else if (v) {
-      if (v.has_attestation) count++;
-      if (v.has_oss_rebuild) count++;
+
+    // Manual approval always gives full trust
+    if (v?.manually_approved === true) {
+      return 3;
     }
-    // behavior from version list
-    if (v?.behavior_passed) count++;
+
+    // Get the three check statuses
+    const hasAttestation =
+      verify?.upstream_attestation ?? v?.has_attestation ?? false;
+    const hasOssRebuild = verify?.oss_rebuild ?? v?.has_oss_rebuild ?? false;
+    const behaviorPassed = v?.behavior_passed ?? false;
+
+    // Special case: failed behavior but has both attestation/rebuild = 1/3
+    if (!behaviorPassed && hasAttestation && hasOssRebuild) {
+      return 1;
+    }
+
+    // Special case: passed behavior but lacks attestation/rebuild = 2/3
+    if (behaviorPassed && !hasAttestation && !hasOssRebuild) {
+      return 2;
+    }
+
+    // Default: count passed checks
+    let count = 0;
+    if (hasAttestation) count++;
+    if (hasOssRebuild) count++;
+    if (behaviorPassed) count++;
     return count;
   }
 
@@ -54,6 +61,35 @@
     if (count === 3) return "checks-all";
     if (count >= 1) return "checks-some";
     return "checks-none";
+  }
+
+  // Calculate trust score for a version using the same logic as checksPassedCount
+  function calculateTrustScore(v: VersionSummary): number {
+    // Manual approval always gives full trust
+    if (v.manually_approved === true) {
+      return 3;
+    }
+
+    const hasAttestation = v.has_attestation;
+    const hasOssRebuild = v.has_oss_rebuild;
+    const behaviorPassed = v.behavior_passed;
+
+    // Special case: failed behavior but has both attestation/rebuild = 1/3
+    if (!behaviorPassed && hasAttestation && hasOssRebuild) {
+      return 1;
+    }
+
+    // Special case: passed behavior but lacks attestation/rebuild = 2/3
+    if (behaviorPassed && !hasAttestation && !hasOssRebuild) {
+      return 2;
+    }
+
+    // Default: count passed checks
+    let count = 0;
+    if (hasAttestation) count++;
+    if (hasOssRebuild) count++;
+    if (behaviorPassed) count++;
+    return count;
   }
 
   // Find the current version's summary from the versions list
@@ -187,23 +223,30 @@
                 <span class="check-label">{check.label}</span>
               </div>
             {/each}
+
+            <!-- Manual review status -->
+            <div class="check-row">
+              {#if currentVersionSummary?.manually_approved === true}
+                <span class="check-indicator pass">Approved</span>
+              {:else if currentVersionSummary?.manually_approved === false}
+                <span class="check-indicator fail">Rejected</span>
+              {:else}
+                <span class="check-indicator pending">Pending</span>
+              {/if}
+              <span class="check-label">Manual review</span>
+            </div>
+
+            <!-- Review comment if exists -->
+            {#if currentVersionSummary?.review_comment}
+              <div class="review-comment-row">
+                <span class="review-comment-label">Review comment:</span>
+                <span class="review-comment-text"
+                  >{currentVersionSummary.review_comment}</span
+                >
+              </div>
+            {/if}
           </div>
         </section>
-
-        <!-- Tags -->
-        {#if pkg.tags.length > 0}
-          <section class="card">
-            <h2 class="card-title">Tags</h2>
-            <div class="tag-list">
-              {#each pkg.tags as tag}
-                <div class="tag-row">
-                  <span class="tag-label">{tag.label}</span>
-                  <span class="tag-value">{decodeTagValue(tag.data)}</span>
-                </div>
-              {/each}
-            </div>
-          </section>
-        {/if}
 
         <!-- Source -->
         <section class="card">
@@ -248,6 +291,7 @@
           </h2>
           <div class="version-list">
             {#each versions as v}
+              {@const score = calculateTrustScore(v)}
               <a
                 href="/packages/{ecosystem}/{encodeURIComponent(
                   identifier,
@@ -261,16 +305,8 @@
                     <span class="latest-badge sm">latest</span>
                   {/if}
                 </span>
-                <span
-                  class="checks-pill sm {checksColor(
-                    (v.has_attestation ? 1 : 0) +
-                      (v.has_oss_rebuild ? 1 : 0) +
-                      (v.behavior_passed ? 1 : 0),
-                  )}"
-                >
-                  {(v.has_attestation ? 1 : 0) +
-                    (v.has_oss_rebuild ? 1 : 0) +
-                    (v.behavior_passed ? 1 : 0)}/3
+                <span class="checks-pill sm {checksColor(score)}">
+                  {score}/3
                 </span>
               </a>
             {:else}
@@ -564,43 +600,39 @@
     color: #dc2626;
   }
 
+  .check-indicator.pending {
+    background: rgba(234, 179, 8, 0.12);
+    color: #a16207;
+  }
+
   .check-label {
     font-size: 0.85rem;
     font-weight: 600;
     color: var(--text-primary);
   }
 
-  /* Tags */
-  .tag-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
+  .review-comment-row {
+    margin-top: 0.5rem;
+    padding: 0.75rem;
+    border-radius: 6px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
   }
 
-  .tag-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0.35rem 0;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .tag-row:last-child {
-    border-bottom: none;
-  }
-
-  .tag-label {
-    font-size: 0.8rem;
+  .review-comment-label {
+    font-size: 0.7rem;
     font-weight: 700;
     color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    margin-bottom: 0.25rem;
+    display: block;
   }
 
-  .tag-value {
-    font-size: 0.8rem;
-    font-weight: 600;
+  .review-comment-text {
+    font-size: 0.875rem;
     color: var(--text-primary);
-    font-family:
-      ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    line-height: 1.4;
   }
 
   /* Source */
