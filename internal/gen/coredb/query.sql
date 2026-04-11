@@ -264,6 +264,11 @@ SELECT "userId" FROM "session"
 WHERE "token" = $1
   AND "expiresAt" > NOW();
 
+-- name: GetUserRole :one
+-- Returns the role for a given user ID.
+SELECT "role" FROM "user"
+WHERE "id" = $1;
+
 -- User/Organisation Queries
 
 -- name: InsertUser :one

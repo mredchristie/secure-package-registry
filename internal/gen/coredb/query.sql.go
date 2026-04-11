@@ -706,6 +706,19 @@ func (q *Queries) GetTagTypeByLabel(ctx context.Context, label string) (int32, e
 	return id, err
 }
 
+const getUserRole = `-- name: GetUserRole :one
+SELECT "role" FROM "user"
+WHERE "id" = $1
+`
+
+// Returns the role for a given user ID.
+func (q *Queries) GetUserRole(ctx context.Context, id string) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, getUserRole, id)
+	var role pgtype.Text
+	err := row.Scan(&role)
+	return role, err
+}
+
 const getVersionReviewStatus = `-- name: GetVersionReviewStatus :one
 SELECT
     (SELECT pvt.value

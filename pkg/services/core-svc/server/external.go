@@ -53,8 +53,11 @@ func NewExternal(addr string, db *pkgdb.Client, admin AdminDeps, project Project
 		r.Post("/{ecosystem}/{identifier}/{version}/verify", vh.Verify)
 	})
 
-	// Admin routes
-	r.Mount("/api/v1/admin", external.NewAdminHandler(admin.Querier, admin.Publisher, admin.MinIO))
+	// Admin routes (authenticated, admin-only)
+	r.Route("/api/v1/admin", func(r chi.Router) {
+		r.Use(external.AdminAuthMiddleware(admin.Querier))
+		r.Mount("/", external.NewAdminHandler(admin.Querier, admin.Publisher, admin.MinIO))
+	})
 
 	// Project routes (authenticated via JWT)
 	r.Route("/api/v1/projects", func(r chi.Router) {

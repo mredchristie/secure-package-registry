@@ -6,6 +6,8 @@ package coredb
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
@@ -53,6 +55,8 @@ type Querier interface {
 	// Tag queries
 	// Looks up a tag type ID by its label.
 	GetTagTypeByLabel(ctx context.Context, label string) (int32, error)
+	// Returns the role for a given user ID.
+	GetUserRole(ctx context.Context, id string) (pgtype.Text, error)
 	// Gets the manual review status and comment for a specific package version.
 	GetVersionReviewStatus(ctx context.Context, arg GetVersionReviewStatusParams) (GetVersionReviewStatusRow, error)
 	// Checks whether an active (pending or running) collection task exists

@@ -13,7 +13,6 @@ import (
 	coresvc "git.duti.dev/secure-package-registry/pkg/services/core-svc"
 	packagewatcher "git.duti.dev/secure-package-registry/pkg/services/package-watcher"
 	regproxy "git.duti.dev/secure-package-registry/pkg/services/reg-proxy"
-	"git.duti.dev/secure-package-registry/pkg/services/seed"
 
 	"git.duti.dev/secure-package-registry/pkg/config"
 	"git.duti.dev/secure-package-registry/pkg/logger"
@@ -45,13 +44,6 @@ func main() {
 
 	if err := deps.RunMigrations(); err != nil {
 		log.Fatal().Err(err).Msg("Failed to run migrations")
-	}
-
-	if cfg.MockData {
-		log.Info().Msg("SPR_MOCK=true: seeding database with dev data")
-		if err := seed.Run(ctx, deps); err != nil {
-			log.Fatal().Err(err).Msg("Seeding failed")
-		}
 	}
 
 	g, gCtx := errgroup.WithContext(ctx)

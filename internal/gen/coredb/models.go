@@ -346,6 +346,7 @@ type Session struct {
 	UserAgent            pgtype.Text
 	UserId               string
 	ActiveOrganizationId pgtype.Text
+	ImpersonatedBy       pgtype.Text
 }
 
 type User struct {
@@ -356,6 +357,10 @@ type User struct {
 	Image         pgtype.Text
 	CreatedAt     pgtype.Timestamptz
 	UpdatedAt     pgtype.Timestamptz
+	Role          pgtype.Text
+	Banned        pgtype.Bool
+	BanReason     pgtype.Text
+	BanExpires    pgtype.Timestamptz
 }
 
 type UserProject struct {
