@@ -234,3 +234,36 @@ export interface ReviewStatusResponse {
 	manually_approved: boolean | null;
 	review_comment: string | null;
 }
+
+// Project policy types
+
+export interface ProjectPolicy {
+	project_id: number;
+	require_provenance: boolean;
+	require_behavior: boolean;
+	allow_manual_review: boolean;
+}
+
+export interface UpdatePolicyRequest {
+	require_provenance?: boolean;
+	require_behavior?: boolean;
+	allow_manual_review?: boolean;
+}
+
+// Project API key types
+
+export interface ProjectAPIKey {
+	id: string;
+	name: string;
+	prefix: string;
+	expires_at?: string;
+	created_at: string;
+}
+
+export interface CreateAPIKeyResponse extends ProjectAPIKey {
+	key: string; // raw key, shown only once
+}
+
+export interface ProjectAPIKeyListResponse {
+	items: ProjectAPIKey[];
+}

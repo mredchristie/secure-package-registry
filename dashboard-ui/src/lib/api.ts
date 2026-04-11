@@ -2,6 +2,7 @@ import { authClient } from "$lib/client.js";
 import type {
 	AddPackageRequest,
 	AddPackageResponse,
+	CreateAPIKeyResponse,
 	DependencyType,
 	Ecosystem,
 	ListPackagesResponse,
@@ -12,12 +13,15 @@ import type {
 	PackageVersionDetail,
 	ProcessTree,
 	Project,
+	ProjectAPIKeyListResponse,
+	ProjectPolicy,
 	ProjectSummaryResponse,
 	ReviewQueueResponse,
 	ReviewStatusResponse,
 	SearchResult,
 	TriggerScanRequest,
 	TriggerScanResponse,
+	UpdatePolicyRequest,
 	UploadProjectResponse,
 	VerifyResponse,
 	VersionListResult,
@@ -197,6 +201,20 @@ export const tasksAPI = {
 
 // Project API — for user dependency tracking
 export const projectsAPI = {
+	// API key endpoints
+
+	createAPIKey: (
+		projectId: number,
+		name: string,
+	): Promise<CreateAPIKeyResponse> => {
+		return authenticatedFetchJSON(
+			`${API_BASE}/projects/${projectId}/api-keys`,
+			{
+				body: JSON.stringify({ name }),
+				method: "POST",
+			},
+		);
+	},
 	delete: async (projectId: number): Promise<void> => {
 		const { data, error } = await authClient.token();
 		if (error || !data?.token) {
@@ -207,6 +225,21 @@ export const projectsAPI = {
 			method: "DELETE",
 		});
 		if (!res.ok) throw new APIError(res.status, "Failed to delete project");
+	},
+
+	deleteAPIKey: async (projectId: number, keyId: string): Promise<void> => {
+		const { data, error } = await authClient.token();
+		if (error || !data?.token) {
+			throw new APIError(401, "Not authenticated");
+		}
+		const res = await fetch(
+			`${API_BASE}/projects/${projectId}/api-keys/${keyId}`,
+			{
+				headers: { Authorization: `Bearer ${data.token}` },
+				method: "DELETE",
+			},
+		);
+		if (!res.ok) throw new APIError(res.status, "Failed to delete API key");
 	},
 
 	dependencies: (
@@ -226,12 +259,32 @@ export const projectsAPI = {
 		return authenticatedFetchJSON(`${API_BASE}/projects/${projectId}`);
 	},
 
+	// Policy endpoints
+
+	getPolicy: (projectId: number): Promise<ProjectPolicy> => {
+		return authenticatedFetchJSON(`${API_BASE}/projects/${projectId}/policy`);
+	},
+
 	list: (): Promise<ListProjectsResponse> => {
 		return authenticatedFetchJSON(`${API_BASE}/projects`);
 	},
 
+	listAPIKeys: (projectId: number): Promise<ProjectAPIKeyListResponse> => {
+		return authenticatedFetchJSON(`${API_BASE}/projects/${projectId}/api-keys`);
+	},
+
 	summary: (projectId: number): Promise<ProjectSummaryResponse> => {
 		return authenticatedFetchJSON(`${API_BASE}/projects/${projectId}/summary`);
+	},
+
+	updatePolicy: (
+		projectId: number,
+		policy: UpdatePolicyRequest,
+	): Promise<ProjectPolicy> => {
+		return authenticatedFetchJSON(`${API_BASE}/projects/${projectId}/policy`, {
+			body: JSON.stringify(policy),
+			method: "PUT",
+		});
 	},
 
 	upload: (name: string, file: string): Promise<UploadProjectResponse> => {

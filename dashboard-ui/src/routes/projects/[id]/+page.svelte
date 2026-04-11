@@ -2,18 +2,28 @@
   import { page } from "$app/stores";
   import { projectsAPI } from "$lib/api";
   import type {
+    CreateAPIKeyResponse,
     DependencyType,
     Project,
+    ProjectAPIKey,
     ProjectDependency,
+    ProjectPolicy,
     ProjectSummaryRow,
   } from "$lib/types/api";
   import {
     AlertCircle,
     ArrowLeft,
+    Check,
+    ClipboardCopy,
+    Key,
     Loader2,
     Package,
+    Plus,
+    Settings,
     ShieldAlert,
     ShieldCheck,
+    Trash2,
+    X,
   } from "lucide-svelte";
 
   const projectId = $derived(Number($page.params.id));
@@ -29,6 +39,23 @@
 
   let typeFilter = $state<DependencyType | "">("");
   let sortByChecks = $state<"asc" | "desc" | null>(null);
+
+  // Policy state
+  let policy = $state<ProjectPolicy | null>(null);
+  let loadingPolicy = $state(false);
+  let savingPolicy = $state(false);
+  let policyError = $state<string | null>(null);
+  let policySaved = $state(false);
+
+  // API keys state
+  let apiKeys = $state<ProjectAPIKey[]>([]);
+  let loadingKeys = $state(false);
+  let newKeyName = $state("");
+  let creatingKey = $state(false);
+  let createdKey = $state<CreateAPIKeyResponse | null>(null);
+  let keyCopied = $state(false);
+  let keyError = $state<string | null>(null);
+  let deletingKeyId = $state<string | null>(null);
 
   async function loadProject() {
     loadingProject = true;
@@ -69,6 +96,89 @@
     } finally {
       loadingSummary = false;
     }
+  }
+
+  async function loadPolicy() {
+    loadingPolicy = true;
+    policyError = null;
+    try {
+      policy = await projectsAPI.getPolicy(projectId);
+    } catch (e) {
+      policyError = e instanceof Error ? e.message : "Failed to load policy";
+    } finally {
+      loadingPolicy = false;
+    }
+  }
+
+  async function updatePolicy(field: keyof ProjectPolicy, value: boolean) {
+    if (!policy) return;
+    savingPolicy = true;
+    policyError = null;
+    policySaved = false;
+    try {
+      policy = await projectsAPI.updatePolicy(projectId, {
+        [field]: value,
+      });
+      policySaved = true;
+      setTimeout(() => (policySaved = false), 2000);
+    } catch (e) {
+      policyError = e instanceof Error ? e.message : "Failed to update policy";
+    } finally {
+      savingPolicy = false;
+    }
+  }
+
+  async function loadAPIKeys() {
+    loadingKeys = true;
+    keyError = null;
+    try {
+      const response = await projectsAPI.listAPIKeys(projectId);
+      apiKeys = response.items;
+    } catch (e) {
+      keyError = e instanceof Error ? e.message : "Failed to load API keys";
+    } finally {
+      loadingKeys = false;
+    }
+  }
+
+  async function createAPIKey() {
+    if (!newKeyName.trim()) return;
+    creatingKey = true;
+    keyError = null;
+    try {
+      createdKey = await projectsAPI.createAPIKey(projectId, newKeyName.trim());
+      newKeyName = "";
+      await loadAPIKeys();
+    } catch (e) {
+      keyError = e instanceof Error ? e.message : "Failed to create API key";
+    } finally {
+      creatingKey = false;
+    }
+  }
+
+  async function deleteAPIKey(keyId: string) {
+    deletingKeyId = keyId;
+    keyError = null;
+    try {
+      await projectsAPI.deleteAPIKey(projectId, keyId);
+      apiKeys = apiKeys.filter((k) => k.id !== keyId);
+      if (createdKey?.id === keyId) createdKey = null;
+    } catch (e) {
+      keyError = e instanceof Error ? e.message : "Failed to delete API key";
+    } finally {
+      deletingKeyId = null;
+    }
+  }
+
+  async function copyKey(text: string) {
+    await navigator.clipboard.writeText(text);
+    keyCopied = true;
+    setTimeout(() => (keyCopied = false), 2000);
+  }
+
+  function dismissCreatedKey() {
+    createdKey = null;
+    keyCopied = false;
   }
 
   function formatDate(dateStr?: string): string {
@@ -149,6 +259,8 @@
       loadProject();
       loadDeps();
       loadSummary();
+      loadPolicy();
+      loadAPIKeys();
     }
   });
 
@@ -241,6 +353,220 @@
         <Loader2 class="spinner-sm" />
       </div>
     {/if}
+
+    <!-- Policy + API Keys grid -->
+    <div class="settings-grid">
+      <!-- Policy section -->
+      <div class="settings-card">
+        <div class="settings-card-header">
+          <Settings class="settings-card-icon" />
+          <h2 class="settings-card-title">Enforcement Policy</h2>
+          {#if policySaved}
+            <span class="saved-badge">
+              <Check class="saved-icon" /> Saved
+            </span>
+          {/if}
+          {#if savingPolicy}
+            <Loader2 class="saving-spinner" />
+          {/if}
+        </div>
+        <p class="settings-card-desc">
+          Configure which checks must pass before the registry proxy allows
+          package installation.
+        </p>
+
+        {#if loadingPolicy}
+          <div class="loading-container-sm">
+            <Loader2 class="spinner-sm" />
+          </div>
+        {:else if policyError}
+          <div class="inline-error">{policyError}</div>
+        {:else if policy}
+          <div class="policy-toggles">
+            <label class="toggle-row">
+              <div class="toggle-info">
+                <span class="toggle-label">Require provenance</span>
+                <span class="toggle-desc"
+                  >Block packages without upstream attestation or OSS rebuild
+                  verification</span
+                >
+              </div>
+              <button
+                class="toggle-switch"
+                class:toggle-on={policy.require_provenance}
+                onclick={() =>
+                  updatePolicy(
+                    "require_provenance",
+                    !policy!.require_provenance,
+                  )}
+                disabled={savingPolicy}
+                aria-label="Toggle require provenance"
+              >
+                <span class="toggle-knob"></span>
+              </button>
+            </label>
+
+            <label class="toggle-row">
+              <div class="toggle-info">
+                <span class="toggle-label">Require behavior analysis</span>
+                <span class="toggle-desc"
+                  >Block packages that haven't passed behavioral analysis
+                  (sandbox testing)</span
+                >
+              </div>
+              <button
+                class="toggle-switch"
+                class:toggle-on={policy.require_behavior}
+                onclick={() =>
+                  updatePolicy("require_behavior", !policy!.require_behavior)}
+                disabled={savingPolicy}
+                aria-label="Toggle require behavior analysis"
+              >
+                <span class="toggle-knob"></span>
+              </button>
+            </label>
+
+            <label class="toggle-row">
+              <div class="toggle-info">
+                <span class="toggle-label">Allow manual review override</span>
+                <span class="toggle-desc"
+                  >Permit manually-approved packages to bypass failed checks</span
+                >
+              </div>
+              <button
+                class="toggle-switch"
+                class:toggle-on={policy.allow_manual_review}
+                onclick={() =>
+                  updatePolicy(
+                    "allow_manual_review",
+                    !policy!.allow_manual_review,
+                  )}
+                disabled={savingPolicy}
+                aria-label="Toggle allow manual review"
+              >
+                <span class="toggle-knob"></span>
+              </button>
+            </label>
+          </div>
+        {/if}
+      </div>
+
+      <!-- API Keys section -->
+      <div class="settings-card">
+        <div class="settings-card-header">
+          <Key class="settings-card-icon" />
+          <h2 class="settings-card-title">API Keys</h2>
+        </div>
+        <p class="settings-card-desc">
+          Keys used to authenticate <code>npm install</code> through the SPR proxy.
+        </p>
+
+        {#if keyError}
+          <div class="inline-error">{keyError}</div>
+        {/if}
+
+        <!-- Create key form -->
+        <form
+          class="create-key-form"
+          onsubmit={(e) => {
+            e.preventDefault();
+            createAPIKey();
+          }}
+        >
+          <input
+            type="text"
+            class="key-name-input"
+            placeholder="Key name (e.g. ci-deploy)"
+            bind:value={newKeyName}
+            disabled={creatingKey}
+          />
+          <button
+            type="submit"
+            class="btn btn-primary btn-sm"
+            disabled={creatingKey || !newKeyName.trim()}
+          >
+            {#if creatingKey}
+              <Loader2 class="btn-icon btn-icon-spin" />
+            {:else}
+              <Plus class="btn-icon" />
+            {/if}
+            Create
+          </button>
+        </form>
+
+        <!-- Newly created key banner -->
+        {#if createdKey}
+          <div class="created-key-banner">
+            <div class="created-key-header">
+              <span class="created-key-title">Key created — copy it now</span>
+              <button
+                class="dismiss-btn"
+                onclick={dismissCreatedKey}
+                aria-label="Dismiss"
+              >
+                <X class="dismiss-icon" />
+              </button>
+            </div>
+            <p class="created-key-warning">This key will not be shown again.</p>
+            <div class="key-display">
+              <code class="key-value">{createdKey.key}</code>
+              <button
+                class="copy-btn"
+                onclick={() => copyKey(createdKey!.key)}
+                aria-label="Copy key"
+              >
+                {#if keyCopied}
+                  <Check class="copy-icon copy-ok" />
+                {:else}
+                  <ClipboardCopy class="copy-icon" />
+                {/if}
+              </button>
+            </div>
+            <div class="npm-config-hint">
+              <span class="hint-label">npm config:</span>
+              <code class="hint-code"
+                >npm config set //localhost:7002/npm/:_authToken={createdKey.key}</code
+              >
+            </div>
+          </div>
+        {/if}
+
+        <!-- Key list -->
+        {#if loadingKeys}
+          <div class="loading-container-sm">
+            <Loader2 class="spinner-sm" />
+          </div>
+        {:else if apiKeys.length === 0}
+          <p class="empty-keys">No API keys yet.</p>
+        {:else}
+          <div class="keys-list">
+            {#each apiKeys as key (key.id)}
+              <div class="key-row">
+                <div class="key-info">
+                  <span class="key-name">{key.name}</span>
+                  <code class="key-prefix">{key.prefix}...</code>
+                </div>
+                <div class="key-meta">
+                  <span class="key-date">{formatDate(key.created_at)}</span>
+                  <button
+                    class="delete-key-btn"
+                    onclick={() => deleteAPIKey(key.id)}
+                    disabled={deletingKeyId === key.id}
+                    aria-label="Delete key {key.name}"
+                  >
+                    {#if deletingKeyId === key.id}
+                      <Loader2 class="delete-icon delete-icon-spin" />
+                    {:else}
+                      <Trash2 class="delete-icon" />
+                    {/if}
+                  </button>
+                </div>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      </div>
+    </div>
 
     <!-- Dependencies table -->
     <div class="deps-section">
@@ -533,6 +859,465 @@
     color: var(--text-secondary);
     opacity: 0.7;
     margin-top: 0.125rem;
+  }
+
+  /* Settings grid (policy + API keys) */
+  .settings-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+  }
+
+  @media (max-width: 768px) {
+    .settings-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .settings-card {
+    border-radius: 12px;
+    border: 1px solid var(--card-border);
+    background: var(--card-bg);
+    padding: 1.25rem;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  }
+
+  .settings-card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .settings-card-header :global(.settings-card-icon) {
+    width: 1.125rem;
+    height: 1.125rem;
+    color: var(--text-secondary);
+  }
+
+  .settings-card-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .settings-card-desc {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-bottom: 1rem;
+    line-height: 1.4;
+  }
+
+  .settings-card-desc code {
+    font-size: 0.75rem;
+    padding: 0.125rem 0.375rem;
+    border-radius: 4px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+  }
+
+  .inline-error {
+    font-size: 0.8rem;
+    color: #dc2626;
+    margin-bottom: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    background: rgba(220, 38, 38, 0.08);
+    border: 1px solid rgba(220, 38, 38, 0.2);
+  }
+
+  /* Policy toggles */
+  .policy-toggles {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.625rem 0.75rem;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+
+  .toggle-row:hover {
+    border-color: var(--accent);
+  }
+
+  .toggle-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .toggle-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .toggle-desc {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    line-height: 1.3;
+    margin-top: 0.125rem;
+  }
+
+  .toggle-switch {
+    position: relative;
+    width: 2.5rem;
+    height: 1.375rem;
+    border-radius: 999px;
+    border: none;
+    background: var(--border);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition:
+      background 0.2s,
+      opacity 0.2s;
+    padding: 0;
+  }
+
+  .toggle-switch:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .toggle-switch.toggle-on {
+    background: #10b981;
+  }
+
+  .toggle-knob {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 1.125rem;
+    height: 1.125rem;
+    border-radius: 50%;
+    background: white;
+    transition: transform 0.2s;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  }
+
+  .toggle-on .toggle-knob {
+    transform: translateX(1.125rem);
+  }
+
+  .saved-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: #10b981;
+    margin-left: auto;
+  }
+
+  .saved-badge :global(.saved-icon) {
+    width: 0.75rem;
+    height: 0.75rem;
+  }
+
+  .settings-card-header :global(.saving-spinner) {
+    width: 0.875rem;
+    height: 0.875rem;
+    color: var(--text-secondary);
+    animation: spin 1s linear infinite;
+    margin-left: auto;
+  }
+
+  /* API keys */
+  .create-key-form {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .key-name-input {
+    flex: 1;
+    height: 2.25rem;
+    padding: 0 0.75rem;
+    font-size: 0.8rem;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  .key-name-input::placeholder {
+    color: var(--text-secondary);
+    opacity: 0.6;
+  }
+
+  .key-name-input:focus {
+    border-color: var(--accent);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-weight: 500;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    transition:
+      background 0.15s,
+      opacity 0.15s;
+  }
+
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .btn-sm {
+    height: 2.25rem;
+    padding: 0 0.875rem;
+    font-size: 0.8rem;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: white;
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    background: var(--accent-hover);
+  }
+
+  .btn :global(.btn-icon) {
+    width: 0.875rem;
+    height: 0.875rem;
+  }
+
+  .btn :global(.btn-icon-spin) {
+    animation: spin 1s linear infinite;
+  }
+
+  /* Created key banner */
+  .created-key-banner {
+    border-radius: 8px;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    background: rgba(16, 185, 129, 0.06);
+    padding: 0.875rem;
+    margin-bottom: 1rem;
+  }
+
+  .created-key-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .created-key-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #10b981;
+  }
+
+  .dismiss-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: 4px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .dismiss-btn:hover {
+    background: var(--bg-secondary);
+  }
+
+  .dismiss-btn :global(.dismiss-icon) {
+    width: 0.875rem;
+    height: 0.875rem;
+  }
+
+  .created-key-warning {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    margin: 0.375rem 0;
+  }
+
+  .key-display {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+  }
+
+  .key-value {
+    flex: 1;
+    font-size: 0.75rem;
+    font-family:
+      ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    color: var(--text-primary);
+    word-break: break-all;
+  }
+
+  .copy-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 4px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition:
+      background 0.15s,
+      color 0.15s;
+  }
+
+  .copy-btn:hover {
+    background: var(--border);
+    color: var(--text-primary);
+  }
+
+  .copy-btn :global(.copy-icon) {
+    width: 0.875rem;
+    height: 0.875rem;
+  }
+
+  .copy-btn :global(.copy-ok) {
+    color: #10b981;
+  }
+
+  .npm-config-hint {
+    margin-top: 0.5rem;
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+  }
+
+  .hint-label {
+    font-weight: 600;
+  }
+
+  .hint-code {
+    display: block;
+    margin-top: 0.25rem;
+    padding: 0.375rem 0.625rem;
+    border-radius: 4px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    font-family:
+      ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 0.7rem;
+    word-break: break-all;
+    color: var(--text-primary);
+  }
+
+  /* Key list */
+  .keys-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .key-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+  }
+
+  .key-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .key-name {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .key-prefix {
+    font-size: 0.7rem;
+    font-family:
+      ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    color: var(--text-secondary);
+  }
+
+  .key-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-shrink: 0;
+  }
+
+  .key-date {
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+  }
+
+  .delete-key-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 4px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition:
+      background 0.15s,
+      color 0.15s;
+  }
+
+  .delete-key-btn:hover:not(:disabled) {
+    background: rgba(220, 38, 38, 0.1);
+    color: #dc2626;
+  }
+
+  .delete-key-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .delete-key-btn :global(.delete-icon) {
+    width: 0.875rem;
+    height: 0.875rem;
+  }
+
+  .delete-key-btn :global(.delete-icon-spin) {
+    animation: spin 1s linear infinite;
+  }
+
+  .empty-keys {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    text-align: center;
+    padding: 1rem 0;
   }
 
   /* Dependencies section */
