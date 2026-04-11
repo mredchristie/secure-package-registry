@@ -3,8 +3,9 @@
 // account's package registry. Tarball downloads for package versions with a
 // "reproducible" tag are served from the registry account (spr-registry);
 // all other requests go to the sandbox account (spr-sandbox).
-// Requests are gated by BetterAuth API key validation (Bearer token,
-// SHA-256/base64url hash lookup).
+// Requests are gated by per-project API key validation (Bearer token,
+// SHA-256/base64url hash lookup) and per-project policy enforcement on
+// tarball downloads.
 package regproxy
 
 import (
@@ -12,6 +13,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -24,6 +26,7 @@ import (
 	"git.duti.dev/secure-package-registry/pkg/httpserver"
 	"git.duti.dev/secure-package-registry/pkg/logger"
 	"git.duti.dev/secure-package-registry/pkg/services"
+	"github.com/jackc/pgx/v5"
 	"github.com/rs/zerolog"
 )
 
@@ -89,6 +92,27 @@ func parseTarballPath(path string) (pkgName, version string) {
 	version = tarballFile[len(prefix) : len(tarballFile)-len(suffix)]
 
 	return pkgName, version
+}
+
+// evaluatePolicy checks a package's tags against the project's policy.
+// Returns a list of human-readable violations. Empty means allowed.
+func evaluatePolicy(project coredb.GetProjectByAPIKeyRow, dep coredb.CheckPackagePolicyRow) []string {
+	// If manual review is allowed and the package is manually approved, allow immediately.
+	if project.AllowManualReview && dep.ManuallyApproved {
+		return nil
+	}
+
+	var violations []string
+
+	if project.RequireProvenance && !dep.HasAttestation && !dep.HasOssRebuild {
+		violations = append(violations, "provenance check failed: no attestation or oss rebuild")
+	}
+
+	if project.RequireBehavior && !dep.BehaviorPassed {
+		violations = append(violations, "behavioral analysis check failed")
+	}
+
+	return violations
 }
 
 // accountForRequest determines which Gitea account should serve the request.
@@ -215,15 +239,21 @@ func Start(ctx context.Context, deps *services.Deps) error {
 			return
 		}
 
+		// Authenticate via project API key.
 		keyHash := hashAPIKey(token)
-		ownerID, err := queries.GetAPIKeyOwner(r.Context(), keyHash)
+		project, err := queries.GetProjectByAPIKey(r.Context(), keyHash)
 		if err != nil {
-			l.Warn().Str("key_hash", keyHash).Msg("Invalid API key")
+			l.Warn().Str("key_hash", keyHash).Msg("Invalid project API key")
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return
 		}
 
-		l.Debug().Str("owner", ownerID).Msg("Accepted request")
+		l = l.With().
+			Int32("project_id", project.ID).
+			Str("project_name", project.Name).
+			Logger()
+
+		l.Debug().Msg("Accepted request")
 		r.Header.Del("Authorization")
 
 		// Only GET requests are allowed.
@@ -236,25 +266,79 @@ func Start(ctx context.Context, deps *services.Deps) error {
 		// Determine routing: check if this is a tarball download for a
 		// reproducible package version.
 		acct := sandbox
-		if pkgName, version := parseTarballPath(r.URL.Path); pkgName != "" && version != "" {
-			hasTag, err := queries.HasPackageVersionTag(r.Context(), coredb.HasPackageVersionTagParams{
+		pkgName, version := parseTarballPath(r.URL.Path)
+
+		if pkgName != "" && version != "" {
+			// --- Policy enforcement on tarball downloads ---
+			depCheck, err := queries.CheckPackagePolicy(r.Context(), coredb.CheckPackagePolicyParams{
+				ProjectID:  project.ID,
 				Ecosystem:  coredb.EcosystemNpm,
 				Identifier: pkgName,
 				Version:    version,
-				Label:      "reproducible",
 			})
 			if err != nil {
-				// Non-fatal: fall back to sandbox on lookup failure.
+				if err == pgx.ErrNoRows {
+					// Package not in project's dependency set — block.
+					l.Info().
+						Str("package", pkgName).
+						Str("version", version).
+						Msg("Blocked: package not in project dependency set")
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusForbidden)
+					_ = json.NewEncoder(w).Encode(map[string]interface{}{
+						"error":   "policy violation",
+						"package": pkgName,
+						"version": version,
+						"violations": []string{
+							"package not in project dependency set",
+						},
+					})
+					return
+				}
+				// DB error — fail open with a warning for non-policy queries.
 				l.Warn().Err(err).
 					Str("package", pkgName).
 					Str("version", version).
-					Msg("Failed to check reproducible tag, falling back to sandbox")
-			} else if hasTag {
-				acct = registry
-				l.Info().
-					Str("package", pkgName).
-					Str("version", version).
-					Msg("Routing to registry (reproducible build)")
+					Msg("Failed to check package policy, failing open")
+			} else {
+				// Evaluate policy.
+				violations := evaluatePolicy(project, depCheck)
+				if len(violations) > 0 {
+					l.Info().
+						Str("package", pkgName).
+						Str("version", version).
+						Strs("violations", violations).
+						Msg("Blocked by policy")
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusForbidden)
+					_ = json.NewEncoder(w).Encode(map[string]interface{}{
+						"error":      "policy violation",
+						"package":    pkgName,
+						"version":    version,
+						"violations": violations,
+					})
+					return
+				}
+
+				// Check reproducible tag for routing.
+				hasRepro, err := queries.HasPackageVersionTag(r.Context(), coredb.HasPackageVersionTagParams{
+					Ecosystem:  coredb.EcosystemNpm,
+					Identifier: pkgName,
+					Version:    version,
+					Label:      "reproducible",
+				})
+				if err != nil {
+					l.Warn().Err(err).
+						Str("package", pkgName).
+						Str("version", version).
+						Msg("Failed to check reproducible tag, falling back to sandbox")
+				} else if hasRepro {
+					acct = registry
+					l.Info().
+						Str("package", pkgName).
+						Str("version", version).
+						Msg("Routing to registry (reproducible build)")
+				}
 			}
 		}
 
