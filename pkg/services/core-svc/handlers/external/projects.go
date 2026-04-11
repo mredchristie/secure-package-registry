@@ -2,8 +2,12 @@ package external
 
 import (
 	"bytes"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/gob"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -50,6 +54,15 @@ func NewProjectHandler(db coredb.Querier, publisher message.Publisher, verifier 
 	r.Get("/{projectID}/dependencies", h.ListDependencies)
 	r.Get("/{projectID}/summary", h.GetSummary)
 	r.Delete("/{projectID}", h.DeleteProject)
+
+	// Policy endpoints
+	r.Get("/{projectID}/policy", h.GetPolicy)
+	r.Put("/{projectID}/policy", h.UpdatePolicy)
+
+	// Project API key endpoints
+	r.Post("/{projectID}/api-keys", h.CreateAPIKey)
+	r.Get("/{projectID}/api-keys", h.ListAPIKeys)
+	r.Delete("/{projectID}/api-keys/{keyID}", h.DeleteAPIKey)
 
 	return r
 }
@@ -403,4 +416,342 @@ func boolPtrFromInterface(v interface{}) *bool {
 		return &b
 	}
 	return nil
+}
+
+// --- Policy handlers ---
+
+// GetPolicy returns the current policy for a project.
+func (h *ProjectHandler) GetPolicy(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
+	if userID == "" {
+		render.Status(r, http.StatusUnauthorized)
+		render.JSON(w, r, map[string]string{"error": "not authenticated"})
+		return
+	}
+
+	projectID, err := strconv.Atoi(chi.URLParam(r, "projectID"))
+	if err != nil {
+		render.Status(r, http.StatusBadRequest)
+		render.JSON(w, r, map[string]string{"error": "invalid project ID"})
+		return
+	}
+
+	project, err := h.db.GetProject(r.Context(), int32(projectID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		render.Status(r, http.StatusNotFound)
+		render.JSON(w, r, map[string]string{"error": "project not found"})
+		return
+	}
+	if err != nil {
+		h.log.Error().Err(err).Int("project_id", projectID).Msg("Failed to get project")
+		render.Status(r, http.StatusInternalServerError)
+		render.JSON(w, r, map[string]string{"error": "failed to get project"})
+		return
+	}
+	if project.UserID != userID {
+		render.Status(r, http.StatusNotFound)
+		render.JSON(w, r, map[string]string{"error": "project not found"})
+		return
+	}
+
+	policy, err := h.db.GetProjectPolicy(r.Context(), int32(projectID))
+	if err != nil {
+		h.log.Error().Err(err).Int("project_id", projectID).Msg("Failed to get policy")
+		render.Status(r, http.StatusInternalServerError)
+		render.JSON(w, r, map[string]string{"error": "failed to get policy"})
+		return
+	}
+
+	render.JSON(w, r, PolicyResponse{
+		ProjectID:         policy.ID,
+		RequireProvenance: policy.RequireProvenance,
+		RequireBehavior:   policy.RequireBehavior,
+		AllowManualReview: policy.AllowManualReview,
+	})
+}
+
+// UpdatePolicy updates the policy for a project. Fields not provided are left unchanged.
+func (h *ProjectHandler) UpdatePolicy(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
+	if userID == "" {
+		render.Status(r, http.StatusUnauthorized)
+		render.JSON(w, r, map[string]string{"error": "not authenticated"})
+		return
+	}
+
+	projectID, err := strconv.Atoi(chi.URLParam(r, "projectID"))
+	if err != nil {
+		render.Status(r, http.StatusBadRequest)
+		render.JSON(w, r, map[string]string{"error": "invalid project ID"})
+		return
+	}
+
+	project, err := h.db.GetProject(r.Context(), int32(projectID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		render.Status(r, http.StatusNotFound)
+		render.JSON(w, r, map[string]string{"error": "project not found"})
+		return
+	}
+	if err != nil {
+		h.log.Error().Err(err).Int("project_id", projectID).Msg("Failed to get project")
+		render.Status(r, http.StatusInternalServerError)
+		render.JSON(w, r, map[string]string{"error": "failed to get project"})
+		return
+	}
+	if project.UserID != userID {
+		render.Status(r, http.StatusNotFound)
+		render.JSON(w, r, map[string]string{"error": "project not found"})
+		return
+	}
+
+	var req UpdatePolicyRequest
+	if err := render.DecodeJSON(r.Body, &req); err != nil {
+		render.Status(r, http.StatusBadRequest)
+		render.JSON(w, r, map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	// Merge: use existing values as defaults, override with provided values.
+	provenance := project.RequireProvenance
+	behavior := project.RequireBehavior
+	manualReview := project.AllowManualReview
+	if req.RequireProvenance != nil {
+		provenance = *req.RequireProvenance
+	}
+	if req.RequireBehavior != nil {
+		behavior = *req.RequireBehavior
+	}
+	if req.AllowManualReview != nil {
+		manualReview = *req.AllowManualReview
+	}
+
+	if err := h.db.UpdateProjectPolicy(r.Context(), coredb.UpdateProjectPolicyParams{
+		ID:                int32(projectID),
+		RequireProvenance: provenance,
+		RequireBehavior:   behavior,
+		AllowManualReview: manualReview,
+	}); err != nil {
+		h.log.Error().Err(err).Int("project_id", projectID).Msg("Failed to update policy")
+		render.Status(r, http.StatusInternalServerError)
+		render.JSON(w, r, map[string]string{"error": "failed to update policy"})
+		return
+	}
+
+	render.JSON(w, r, PolicyResponse{
+		ProjectID:         int32(projectID),
+		RequireProvenance: provenance,
+		RequireBehavior:   behavior,
+		AllowManualReview: manualReview,
+	})
+}
+
+// --- API key handlers ---
+
+// generateAPIKey creates a cryptographically random API key with a "spr_" prefix.
+// Returns the raw key and its SHA-256 hash (base64url, no padding).
+func generateAPIKey() (raw string, hash string, prefix string, err error) {
+	b := make([]byte, 32)
+	if _, err = rand.Read(b); err != nil {
+		return "", "", "", fmt.Errorf("generate random bytes: %w", err)
+	}
+	raw = "spr_" + base64.RawURLEncoding.EncodeToString(b)
+	h := sha256.Sum256([]byte(raw))
+	hash = base64.RawURLEncoding.EncodeToString(h[:])
+	prefix = raw[:12] // "spr_" + first 8 chars of encoded key
+	return raw, hash, prefix, nil
+}
+
+// CreateAPIKey creates a new API key for a project. The raw key is returned
+// only once in the response.
+func (h *ProjectHandler) CreateAPIKey(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
+	if userID == "" {
+		render.Status(r, http.StatusUnauthorized)
+		render.JSON(w, r, map[string]string{"error": "not authenticated"})
+		return
+	}
+
+	projectID, err := strconv.Atoi(chi.URLParam(r, "projectID"))
+	if err != nil {
+		render.Status(r, http.StatusBadRequest)
+		render.JSON(w, r, map[string]string{"error": "invalid project ID"})
+		return
+	}
+
+	// Verify ownership.
+	project, err := h.db.GetProject(r.Context(), int32(projectID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		render.Status(r, http.StatusNotFound)
+		render.JSON(w, r, map[string]string{"error": "project not found"})
+		return
+	}
+	if err != nil {
+		h.log.Error().Err(err).Int("project_id", projectID).Msg("Failed to get project")
+		render.Status(r, http.StatusInternalServerError)
+		render.JSON(w, r, map[string]string{"error": "failed to get project"})
+		return
+	}
+	if project.UserID != userID {
+		render.Status(r, http.StatusNotFound)
+		render.JSON(w, r, map[string]string{"error": "project not found"})
+		return
+	}
+
+	var req CreateAPIKeyRequest
+	if err := render.DecodeJSON(r.Body, &req); err != nil {
+		render.Status(r, http.StatusBadRequest)
+		render.JSON(w, r, map[string]string{"error": "invalid request body"})
+		return
+	}
+	if req.Name == "" {
+		req.Name = "default"
+	}
+
+	rawKey, keyHash, keyPrefix, err := generateAPIKey()
+	if err != nil {
+		h.log.Error().Err(err).Msg("Failed to generate API key")
+		render.Status(r, http.StatusInternalServerError)
+		render.JSON(w, r, map[string]string{"error": "failed to generate API key"})
+		return
+	}
+
+	keyID := watermill.NewUUID()
+	if err := h.db.InsertProjectAPIKey(r.Context(), coredb.InsertProjectAPIKeyParams{
+		ID:        keyID,
+		ProjectID: int32(projectID),
+		Name:      req.Name,
+		KeyHash:   keyHash,
+		Prefix:    keyPrefix,
+	}); err != nil {
+		h.log.Error().Err(err).Int("project_id", projectID).Msg("Failed to insert API key")
+		render.Status(r, http.StatusInternalServerError)
+		render.JSON(w, r, map[string]string{"error": "failed to create API key"})
+		return
+	}
+
+	render.Status(r, http.StatusCreated)
+	render.JSON(w, r, CreateAPIKeyResponse{
+		ID:     keyID,
+		Name:   req.Name,
+		Prefix: keyPrefix,
+		RawKey: rawKey,
+	})
+}
+
+// ListAPIKeys returns all API keys for a project (prefix only, no raw keys).
+func (h *ProjectHandler) ListAPIKeys(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
+	if userID == "" {
+		render.Status(r, http.StatusUnauthorized)
+		render.JSON(w, r, map[string]string{"error": "not authenticated"})
+		return
+	}
+
+	projectID, err := strconv.Atoi(chi.URLParam(r, "projectID"))
+	if err != nil {
+		render.Status(r, http.StatusBadRequest)
+		render.JSON(w, r, map[string]string{"error": "invalid project ID"})
+		return
+	}
+
+	// Verify ownership.
+	project, err := h.db.GetProject(r.Context(), int32(projectID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		render.Status(r, http.StatusNotFound)
+		render.JSON(w, r, map[string]string{"error": "project not found"})
+		return
+	}
+	if err != nil {
+		h.log.Error().Err(err).Int("project_id", projectID).Msg("Failed to get project")
+		render.Status(r, http.StatusInternalServerError)
+		render.JSON(w, r, map[string]string{"error": "failed to get project"})
+		return
+	}
+	if project.UserID != userID {
+		render.Status(r, http.StatusNotFound)
+		render.JSON(w, r, map[string]string{"error": "project not found"})
+		return
+	}
+
+	keys, err := h.db.ListProjectAPIKeys(r.Context(), int32(projectID))
+	if err != nil {
+		h.log.Error().Err(err).Int("project_id", projectID).Msg("Failed to list API keys")
+		render.Status(r, http.StatusInternalServerError)
+		render.JSON(w, r, map[string]string{"error": "failed to list API keys"})
+		return
+	}
+
+	items := make([]APIKeyListItem, 0, len(keys))
+	for _, k := range keys {
+		item := APIKeyListItem{
+			ID:     k.ID,
+			Name:   k.Name,
+			Prefix: k.Prefix,
+		}
+		if k.ExpiresAt.Valid {
+			s := k.ExpiresAt.Time.String()
+			item.ExpiresAt = &s
+		}
+		if k.CreatedAt.Valid {
+			item.CreatedAt = k.CreatedAt.Time.String()
+		}
+		items = append(items, item)
+	}
+
+	render.JSON(w, r, APIKeyListResponse{Items: items})
+}
+
+// DeleteAPIKey revokes a project API key.
+func (h *ProjectHandler) DeleteAPIKey(w http.ResponseWriter, r *http.Request) {
+	userID := UserIDFromContext(r.Context())
+	if userID == "" {
+		render.Status(r, http.StatusUnauthorized)
+		render.JSON(w, r, map[string]string{"error": "not authenticated"})
+		return
+	}
+
+	projectID, err := strconv.Atoi(chi.URLParam(r, "projectID"))
+	if err != nil {
+		render.Status(r, http.StatusBadRequest)
+		render.JSON(w, r, map[string]string{"error": "invalid project ID"})
+		return
+	}
+
+	keyID := chi.URLParam(r, "keyID")
+	if keyID == "" {
+		render.Status(r, http.StatusBadRequest)
+		render.JSON(w, r, map[string]string{"error": "missing key ID"})
+		return
+	}
+
+	// Verify ownership.
+	project, err := h.db.GetProject(r.Context(), int32(projectID))
+	if errors.Is(err, pgx.ErrNoRows) {
+		render.Status(r, http.StatusNotFound)
+		render.JSON(w, r, map[string]string{"error": "project not found"})
+		return
+	}
+	if err != nil {
+		h.log.Error().Err(err).Int("project_id", projectID).Msg("Failed to get project")
+		render.Status(r, http.StatusInternalServerError)
+		render.JSON(w, r, map[string]string{"error": "failed to get project"})
+		return
+	}
+	if project.UserID != userID {
+		render.Status(r, http.StatusNotFound)
+		render.JSON(w, r, map[string]string{"error": "project not found"})
+		return
+	}
+
+	if err := h.db.DeleteProjectAPIKey(r.Context(), coredb.DeleteProjectAPIKeyParams{
+		ID:        keyID,
+		ProjectID: int32(projectID),
+	}); err != nil {
+		h.log.Error().Err(err).Str("key_id", keyID).Msg("Failed to delete API key")
+		render.Status(r, http.StatusInternalServerError)
+		render.JSON(w, r, map[string]string{"error": "failed to delete API key"})
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }

@@ -183,3 +183,56 @@ type ProjectSummaryResponse struct {
 	ProjectID int          `json:"project_id"`
 	Summary   []SummaryRow `json:"summary"`
 }
+
+// --- Policy: requests ---
+
+// UpdatePolicyRequest is the request body for updating a project's policy.
+type UpdatePolicyRequest struct {
+	RequireProvenance *bool `json:"require_provenance"`
+	RequireBehavior   *bool `json:"require_behavior"`
+	AllowManualReview *bool `json:"allow_manual_review"`
+}
+
+// --- Policy: responses ---
+
+// PolicyResponse is the response body for GetPolicy and UpdatePolicy.
+type PolicyResponse struct {
+	ProjectID         int32 `json:"project_id"`
+	RequireProvenance bool  `json:"require_provenance"`
+	RequireBehavior   bool  `json:"require_behavior"`
+	AllowManualReview bool  `json:"allow_manual_review"`
+}
+
+// --- Project API key: requests ---
+
+// CreateAPIKeyRequest is the request body for creating a project API key.
+type CreateAPIKeyRequest struct {
+	Name string `json:"name"`
+}
+
+// --- Project API key: responses ---
+
+// CreateAPIKeyResponse is the response body for CreateAPIKey.
+// The raw key is returned only once at creation time.
+type CreateAPIKeyResponse struct {
+	ID        string  `json:"id"`
+	Name      string  `json:"name"`
+	Prefix    string  `json:"prefix"`
+	RawKey    string  `json:"key"`
+	ExpiresAt *string `json:"expires_at,omitempty"`
+	CreatedAt string  `json:"created_at"`
+}
+
+// APIKeyListItem is a single item returned by ListAPIKeys.
+type APIKeyListItem struct {
+	ID        string  `json:"id"`
+	Name      string  `json:"name"`
+	Prefix    string  `json:"prefix"`
+	ExpiresAt *string `json:"expires_at,omitempty"`
+	CreatedAt string  `json:"created_at"`
+}
+
+// APIKeyListResponse is the response body for ListAPIKeys.
+type APIKeyListResponse struct {
+	Items []APIKeyListItem `json:"items"`
+}
