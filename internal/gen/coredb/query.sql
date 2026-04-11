@@ -338,10 +338,8 @@ WHERE project_id = $1;
 
 -- name: InsertProjectDependency :exec
 -- Inserts a single project dependency. ON CONFLICT ignores duplicates.
--- checked_at is set NOW() for direct deps (analysis triggered immediately),
--- NULL for transitive deps (will be set when parent completes analysis).
-INSERT INTO project_dependencies (project_id, package_id, package_version_id, dependency_type, version_constraint, checked_at)
-VALUES ($1, $2, $3, $4, $5, CASE WHEN $4 = 'direct'::dependency_type THEN NOW() ELSE NULL END)
+INSERT INTO project_dependencies (project_id, package_id, package_version_id, dependency_type, version_constraint)
+VALUES ($1, $2, $3, $4, $5)
 ON CONFLICT (project_id, package_id, package_version_id) DO NOTHING;
 
 -- name: ListProjectDependencies :many
@@ -357,9 +355,9 @@ SELECT
     pv.version,
     pd.package_version_id,
     pd.package_id,
-    (CASE WHEN pd.checked_at IS NOT NULL THEN COALESCE(att.value = 'true'::jsonb, false) ELSE NULL END) AS has_attestation,
-    (CASE WHEN pd.checked_at IS NOT NULL THEN COALESCE(oss.value = 'true'::jsonb, false) ELSE NULL END) AS has_oss_rebuild,
-    (CASE WHEN pd.checked_at IS NOT NULL THEN COALESCE(beh.value = 'true'::jsonb, false) ELSE NULL END) AS behavior_passed
+    (CASE WHEN att.value IS NOT NULL THEN att.value = 'true'::jsonb ELSE NULL END) AS has_attestation,
+    (CASE WHEN oss.value IS NOT NULL THEN oss.value = 'true'::jsonb ELSE NULL END) AS has_oss_rebuild,
+    (CASE WHEN beh.value IS NOT NULL THEN beh.value = 'true'::jsonb ELSE NULL END) AS behavior_passed
 FROM project_dependencies pd
 JOIN packages p ON p.id = pd.package_id
 JOIN package_versions pv ON pv.id = pd.package_version_id

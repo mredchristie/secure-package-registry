@@ -86,21 +86,26 @@
     }
   }
 
+  // Total applicable checks for a dependency (behavioral analysis only runs on direct deps).
+  function checksTotalCount(dep: ProjectDependency): number {
+    return dep.dependency_type === "direct" ? 3 : 2;
+  }
+
   // Count of passed checks (only counts true, excludes null/pending).
   function checksPassedCount(dep: ProjectDependency): number {
     return (
       (dep.has_attestation === true ? 1 : 0) +
       (dep.has_oss_rebuild === true ? 1 : 0) +
-      (dep.behavior_passed === true ? 1 : 0)
+      (dep.dependency_type === "direct" && dep.behavior_passed === true ? 1 : 0)
     );
   }
 
-  // Count of pending checks (null values).
+  // Count of pending checks (null values, scoped to applicable checks).
   function checksPendingCount(dep: ProjectDependency): number {
     return (
       (dep.has_attestation === null ? 1 : 0) +
       (dep.has_oss_rebuild === null ? 1 : 0) +
-      (dep.behavior_passed === null ? 1 : 0)
+      (dep.dependency_type === "direct" && dep.behavior_passed === null ? 1 : 0)
     );
   }
 
@@ -119,7 +124,7 @@
     summary.find((s) => s.dependency_type === "transitive"),
   );
 
-  // Count deps that fail ALL 3 checks (0 of 3 passed, no pending).
+  // Count deps that fail ALL applicable checks (0 passed, no pending).
   const totalFailedAll = $derived(
     deps.filter(
       (d) => checksPendingCount(d) === 0 && checksPassedCount(d) === 0,
@@ -282,6 +287,7 @@
               {#each sortedDeps as dep}
                 {@const passed = checksPassedCount(dep)}
                 {@const pending = checksPendingCount(dep)}
+                {@const total = checksTotalCount(dep)}
                 <tr>
                   <td>
                     <span class="eco-pill">{dep.ecosystem}</span>
@@ -308,11 +314,11 @@
                       <span
                         class="checks-badge"
                         class:checks-none={passed === 0}
-                        class:checks-partial={passed > 0 && passed < 3}
-                        class:checks-all={passed === 3}
+                        class:checks-partial={passed > 0 && passed < total}
+                        class:checks-all={passed === total}
                       >
                         <ShieldCheck class="checks-icon" />
-                        {passed}/3
+                        {passed}/{total}
                       </span>
                     {/if}
                   </td>
