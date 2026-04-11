@@ -142,7 +142,7 @@ export interface VerifyResponse {
 // Version list types (public endpoint)
 
 export interface VersionSummary {
-	behavior_passed: boolean;
+	behavior_passed: boolean | null;
 	has_attestation: boolean;
 	has_oss_rebuild: boolean;
 	latest: boolean;

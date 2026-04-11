@@ -21,11 +21,11 @@
   let error = $state("");
 
   // Count how many checks pass (0-3): attestation, oss rebuild, behavior
-  // with special handling for manual approval overrides
+  // Returns null if behavioral analysis hasn't been run yet
   function checksPassedCount(
     v: VersionSummary | null,
     verify: VerifyResponse | null,
-  ): number {
+  ): number | null {
     if (!v && !verify) return 0;
 
     // Manual approval always gives full trust
@@ -37,7 +37,12 @@
     const hasAttestation =
       verify?.upstream_attestation ?? v?.has_attestation ?? false;
     const hasOssRebuild = verify?.oss_rebuild ?? v?.has_oss_rebuild ?? false;
-    const behaviorPassed = v?.behavior_passed ?? false;
+    const behaviorPassed = v?.behavior_passed;
+
+    // If behavioral analysis hasn't been run, this is not a full score
+    if (behaviorPassed === null) {
+      return null;
+    }
 
     // Special case: failed behavior but has both attestation/rebuild = 1/3
     if (!behaviorPassed && hasAttestation && hasOssRebuild) {
@@ -64,7 +69,8 @@
   }
 
   // Calculate trust score for a version using the same logic as checksPassedCount
-  function calculateTrustScore(v: VersionSummary): number {
+  // Returns null if behavioral analysis is pending
+  function calculateTrustScore(v: VersionSummary): number | null {
     // Manual approval always gives full trust
     if (v.manually_approved === true) {
       return 3;
@@ -73,6 +79,11 @@
     const hasAttestation = v.has_attestation;
     const hasOssRebuild = v.has_oss_rebuild;
     const behaviorPassed = v.behavior_passed;
+
+    // If behavioral analysis hasn't been run, return null to show "Pending"
+    if (behaviorPassed === null) {
+      return null;
+    }
 
     // Special case: failed behavior but has both attestation/rebuild = 1/3
     if (!behaviorPassed && hasAttestation && hasOssRebuild) {
@@ -143,57 +154,63 @@
         identifier: result.identifier,
         version: result.version,
         upstream_attestation:
-          result.upstream_attestation ||
-          verifyResult?.upstream_attestation ||
-          false,
-        oss_rebuild: result.oss_rebuild || verifyResult?.oss_rebuild || false,
+          verifyResult?.upstream_attestation || result.upstream_attestation,
+        oss_rebuild: verifyResult?.oss_rebuild || result.oss_rebuild,
       };
     } catch {
-      // Silently fail — verification is best-effort
+      error = "Verification failed.";
     } finally {
       verifying = false;
     }
   }
 
+  // Load data when component mounts or route params change
   $effect(() => {
-    if (ecosystem && identifier && version) {
-      loadData();
-    }
-  });
-
-  // Reset verification state when switching versions
-  $effect(() => {
-    if (version) {
-      verifyResult = null;
-    }
+    // Re-run when route params change
+    ecosystem;
+    identifier;
+    version;
+    loadData();
   });
 </script>
+
+<svelte:head>
+  <title>{pkg ? `${pkg.identifier}@${version}` : "Package"} - SPR</title>
+</svelte:head>
 
 <main>
   <a href="/search" class="back-link">Back to search</a>
 
-  {#if error}
-    <div class="error-banner">{error}</div>
-  {/if}
-
-  {#if loading}
-    <div class="state-msg">Loading…</div>
-  {:else if pkg}
-    <!-- Header -->
-    <div class="pkg-header">
-      <div class="pkg-title-row">
-        <h1 class="pkg-name">{pkg.identifier}</h1>
-        <span class="eco-badge {pkg.ecosystem}">{pkg.ecosystem}</span>
+  {#if loading && !pkg}
+    <div class="loading-container">
+      <div class="spinner"></div>
+    </div>
+  {:else if error && !pkg}
+    <div class="error-banner">
+      <div class="error-content">
+        <span class="error-icon">&#9888;</span>
+        <span>{error}</span>
       </div>
-      <div class="pkg-meta">
-        <span class="version-pill">
-          {pkg.version}
+    </div>
+  {:else if pkg}
+    <div class="header">
+      <div class="header-left">
+        <h1 class="package-title">
+          {pkg.identifier}
+          <span class="eco-badge">{pkg.ecosystem}</span>
+        </h1>
+        <span class="version-tag">
+          <code class="version-code">{pkg.version}</code>
           {#if pkg.latest}
             <span class="latest-badge">latest</span>
           {/if}
         </span>
-        <span class="checks-pill {checksColor(passedCount)}">
-          {passedCount}/3 checks
+        <span class="checks-pill {checksColor(passedCount ?? 0)}">
+          {#if passedCount === null}
+            Pending
+          {:else}
+            Trust score: {passedCount}/3
+          {/if}
         </span>
       </div>
     </div>
@@ -215,23 +232,46 @@
           </div>
 
           <div class="check-grid">
-            {#each [{ label: "Upstream attestation", passed: verifyResult?.upstream_attestation ?? currentVersionSummary?.has_attestation ?? false }, { label: "OSS reproducible build", passed: verifyResult?.oss_rebuild ?? currentVersionSummary?.has_oss_rebuild ?? false }, { label: "Behavioral analysis", passed: currentVersionSummary?.behavior_passed ?? false }] as check}
-              <div class="check-row">
-                <span class="check-indicator {check.passed ? 'pass' : 'fail'}">
-                  {check.passed ? "Pass" : "Fail"}
-                </span>
-                <span class="check-label">{check.label}</span>
-              </div>
-            {/each}
+            <!-- Attestation check -->
+            <div class="check-row">
+              {#if verifyResult?.upstream_attestation ?? currentVersionSummary?.has_attestation ?? false}
+                <span class="check-indicator pass">PASS</span>
+              {:else}
+                <span class="check-indicator fail">Missing</span>
+              {/if}
+              <span class="check-label">Upstream attestation</span>
+            </div>
+
+            <!-- OSS rebuild check -->
+            <div class="check-row">
+              {#if verifyResult?.oss_rebuild ?? currentVersionSummary?.has_oss_rebuild ?? false}
+                <span class="check-indicator pass">PASS</span>
+              {:else}
+                <span class="check-indicator fail">Missing</span>
+              {/if}
+              <span class="check-label">OSS reproducible build</span>
+            </div>
+
+            <!-- Behavioral analysis check -->
+            <div class="check-row">
+              {#if currentVersionSummary?.behavior_passed === null}
+                <span class="check-indicator pending">PENDING</span>
+              {:else if currentVersionSummary?.behavior_passed === true}
+                <span class="check-indicator pass">PASS</span>
+              {:else}
+                <span class="check-indicator fail">FAIL</span>
+              {/if}
+              <span class="check-label">Behavioral analysis</span>
+            </div>
 
             <!-- Manual review status -->
             <div class="check-row">
               {#if currentVersionSummary?.manually_approved === true}
-                <span class="check-indicator pass">Approved</span>
+                <span class="check-indicator pass">APPROVED</span>
               {:else if currentVersionSummary?.manually_approved === false}
-                <span class="check-indicator fail">Rejected</span>
+                <span class="check-indicator fail">REJECTED</span>
               {:else}
-                <span class="check-indicator pending">Pending</span>
+                <span class="check-indicator pending">PENDING</span>
               {/if}
               <span class="check-label">Manual review</span>
             </div>
@@ -272,18 +312,20 @@
                 <code class="source-code">{pkg.source.commit}</code>
               </div>
             {/if}
-            <div class="source-row">
-              <span class="source-label">Install</span>
-              <code class="source-code">
-                npm install {pkg.identifier}@{pkg.version}
-              </code>
-            </div>
+          </div>
+
+          <div class="install-section">
+            <div class="install-label">INSTALL</div>
+            <code class="install-code">
+              npm install {pkg.identifier}@{pkg.version}
+            </code>
           </div>
         </section>
       </div>
 
-      <!-- Sidebar: Versions -->
-      <aside class="side-col">
+      <!-- Sidebar -->
+      <aside class="sidebar">
+        <!-- Versions -->
         <section class="card">
           <h2 class="card-title">
             Versions
@@ -305,9 +347,13 @@
                     <span class="latest-badge sm">latest</span>
                   {/if}
                 </span>
-                <span class="checks-pill sm {checksColor(score)}">
-                  {score}/3
-                </span>
+                {#if score === null}
+                  <span class="checks-pill sm checks-none">Pending</span>
+                {:else}
+                  <span class="checks-pill sm {checksColor(score)}">
+                    {score}/3
+                  </span>
+                {/if}
               </a>
             {:else}
               <p class="empty-text">No versions found.</p>
@@ -334,334 +380,289 @@
     font-weight: 600;
     color: var(--text-secondary);
     text-decoration: none;
-    transition: color 0.15s;
   }
 
   .back-link:hover {
-    color: var(--accent);
+    color: var(--text-primary);
+  }
+
+  .loading-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 50vh;
+  }
+
+  .spinner {
+    width: 32px;
+    height: 32px;
+    border: 2px solid var(--border);
+    border-top-color: var(--text-primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
   }
 
   .error-banner {
-    margin-bottom: 1rem;
-    padding: 0.75rem 1rem;
+    background: #fee;
+    border: 1px solid #fcc;
+    padding: 1rem;
     border-radius: 8px;
-    border: 1px solid rgba(220, 38, 38, 0.2);
-    background: rgba(220, 38, 38, 0.08);
-    color: #dc2626;
-    font-size: 0.875rem;
+    margin-bottom: 1rem;
   }
 
-  .state-msg {
-    text-align: center;
-    color: var(--text-secondary);
-    padding: 3rem 0;
-    font-size: 0.9rem;
-  }
-
-  /* Header */
-  .pkg-header {
-    margin-bottom: 1.25rem;
-  }
-
-  .pkg-title-row {
-    display: flex;
-    align-items: center;
-    gap: 0.625rem;
-    margin-bottom: 0.5rem;
-  }
-
-  .pkg-name {
-    font-size: 1.5rem;
-    font-weight: 800;
-    margin: 0;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .pkg-meta {
+  .error-content {
     display: flex;
     align-items: center;
     gap: 0.5rem;
   }
 
-  .version-pill {
+  .error-icon {
+    color: #c33;
+    font-size: 1.2rem;
+  }
+
+  .header {
+    margin-bottom: 1.5rem;
+  }
+
+  .header-left {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .package-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin: 0;
+  }
+
+  .eco-badge {
+    background: var(--surface);
+    color: var(--text-secondary);
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 0.25rem 0.4rem;
+    border-radius: 4px;
+    text-transform: uppercase;
+  }
+
+  .version-tag {
     display: inline-flex;
     align-items: center;
-    gap: 0.35rem;
-    padding: 0.2rem 0.6rem;
-    font-size: 0.8rem;
-    font-weight: 700;
-    font-family:
-      ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    gap: 0.5rem;
+    background: var(--surface);
+    padding: 0.25rem 0.5rem;
     border-radius: 6px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
+    font-size: 0.9rem;
+  }
+
+  .version-code {
+    font-size: 0.8rem;
     color: var(--text-secondary);
   }
 
   .latest-badge {
-    display: inline-block;
-    padding: 0.1rem 0.35rem;
-    font-size: 0.6rem;
-    font-weight: 800;
-    border-radius: 4px;
     background: #16a34a;
     color: white;
+    font-size: 0.6rem;
+    font-weight: 700;
+    padding: 0.15rem 0.35rem;
+    border-radius: 4px;
     text-transform: uppercase;
-    font-family:
-      system-ui,
-      -apple-system,
-      sans-serif;
   }
 
-  .latest-badge.sm {
-    font-size: 0.55rem;
-    padding: 0.05rem 0.25rem;
-  }
-
-  /* Checks pill */
   .checks-pill {
-    display: inline-block;
-    padding: 0.2rem 0.5rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.75rem;
+    border-radius: 20px;
     font-size: 0.75rem;
-    font-weight: 800;
-    border-radius: 6px;
-    border: 1.5px solid;
+    font-weight: 600;
   }
 
-  .checks-pill.sm {
-    font-size: 0.65rem;
-    padding: 0.1rem 0.35rem;
+  .checks-pill.checks-none {
+    background: #fee;
+    color: #991b1b;
   }
 
-  .checks-all {
-    color: #16a34a;
-    border-color: #22c55e;
-    background: rgba(22, 163, 74, 0.08);
+  .checks-pill.checks-some {
+    background: #fef3c7;
+    color: #92400e;
   }
 
-  .checks-some {
-    color: #f59e0b;
-    border-color: #fbbf24;
-    background: rgba(245, 158, 11, 0.08);
+  .checks-pill.checks-all {
+    background: #dcfce7;
+    color: #166534;
   }
 
-  .checks-none {
-    color: #dc2626;
-    border-color: #ef4444;
-    background: rgba(220, 38, 38, 0.08);
-  }
-
-  /* Ecosystem badge */
-  .eco-badge {
-    display: inline-block;
-    padding: 0.1rem 0.4rem;
-    font-size: 0.65rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
-    border-radius: 999px;
-    border: 1px solid;
-    flex-shrink: 0;
-  }
-
-  .eco-badge.npm {
-    border-color: rgba(252, 165, 165, 0.4);
-    color: #b91c1c;
-    background: #fef2f2;
-  }
-
-  .eco-badge.go {
-    border-color: rgba(103, 232, 249, 0.4);
-    color: #0e7490;
-    background: #ecfeff;
-  }
-
-  .eco-badge.cargo {
-    border-color: rgba(253, 186, 116, 0.4);
-    color: #c2410c;
-    background: #fff7ed;
-  }
-
-  .eco-badge.pypi {
-    border-color: rgba(147, 197, 253, 0.4);
-    color: #1d4ed8;
-    background: #eff6ff;
-  }
-
-  /* Layout */
   .layout {
     display: grid;
     grid-template-columns: 1fr 280px;
-    gap: 1rem;
-    align-items: start;
+    gap: 1.25rem;
   }
 
-  .main-col,
-  .side-col {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
+  @media (max-width: 800px) {
+    .layout {
+      grid-template-columns: 1fr;
+    }
+    .sidebar {
+      order: -1;
+    }
   }
 
-  /* Cards */
   .card {
     background: var(--card-bg);
-    border: 1px solid var(--card-border);
-    border-radius: 10px;
-    padding: 1rem;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 1.25rem;
+  }
+
+  .card + .card {
+    margin-top: 1rem;
+  }
+
+  .card-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 0 0 1rem;
   }
 
   .card-header-row {
     display: flex;
-    align-items: center;
     justify-content: space-between;
-    margin-bottom: 0.75rem;
-  }
-
-  .card-title {
-    font-size: 0.9rem;
-    font-weight: 800;
-    margin: 0 0 0.75rem 0;
-    color: var(--text-primary);
-    display: flex;
     align-items: center;
-    gap: 0.4rem;
+    margin-bottom: 1rem;
   }
 
   .card-header-row .card-title {
-    margin-bottom: 0;
+    margin: 0;
   }
 
-  .version-count {
-    font-size: 0.7rem;
-    font-weight: 700;
-    padding: 0.1rem 0.35rem;
-    border-radius: 4px;
-    background: var(--bg-secondary);
-    color: var(--text-secondary);
-  }
-
-  /* Verification */
   .verify-btn {
-    padding: 0.35rem 0.7rem;
-    font-size: 0.75rem;
-    font-weight: 700;
+    background: var(--btn-primary-bg);
+    color: var(--btn-primary-fg);
+    border: none;
+    padding: 0.5rem 1rem;
     border-radius: 6px;
-    border: 1px solid var(--accent);
-    background: var(--accent);
-    color: white;
+    font-size: 0.8rem;
+    font-weight: 600;
     cursor: pointer;
-    transition: opacity 0.15s;
+    transition: opacity 0.15s ease;
   }
 
   .verify-btn:hover:not(:disabled) {
-    opacity: 0.85;
+    opacity: 0.9;
   }
 
   .verify-btn:disabled {
-    opacity: 0.5;
+    opacity: 0.6;
     cursor: not-allowed;
   }
 
   .check-grid {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 0.75rem;
   }
 
   .check-row {
     display: flex;
     align-items: center;
-    gap: 0.6rem;
+    gap: 0.75rem;
   }
 
   .check-indicator {
-    display: inline-block;
-    width: 3rem;
-    text-align: center;
-    padding: 0.15rem 0;
-    font-size: 0.7rem;
-    font-weight: 800;
+    min-width: 90px;
+    padding: 0.35rem 0.75rem;
     border-radius: 4px;
-    text-transform: uppercase;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-align: center;
     flex-shrink: 0;
   }
 
   .check-indicator.pass {
-    background: rgba(22, 163, 74, 0.12);
-    color: #16a34a;
+    background: #dcfce7;
+    color: #166534;
   }
 
   .check-indicator.fail {
-    background: rgba(220, 38, 38, 0.1);
-    color: #dc2626;
+    background: #fee2e2;
+    color: #991b1b;
   }
 
   .check-indicator.pending {
-    background: rgba(234, 179, 8, 0.12);
-    color: #a16207;
+    background: #fef3c7;
+    color: #92400e;
   }
 
   .check-label {
-    font-size: 0.85rem;
-    font-weight: 600;
+    font-size: 0.9rem;
     color: var(--text-primary);
   }
 
   .review-comment-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
     margin-top: 0.5rem;
-    padding: 0.75rem;
-    border-radius: 6px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border);
   }
 
   .review-comment-label {
-    font-size: 0.7rem;
-    font-weight: 700;
+    font-size: 0.8rem;
+    font-weight: 600;
     color: var(--text-secondary);
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    margin-bottom: 0.25rem;
-    display: block;
+    flex-shrink: 0;
   }
 
   .review-comment-text {
-    font-size: 0.875rem;
+    font-size: 0.85rem;
     color: var(--text-primary);
-    line-height: 1.4;
+    font-style: italic;
   }
 
-  /* Source */
   .source-list {
     display: flex;
     flex-direction: column;
-    gap: 0.6rem;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
   }
 
   .source-row {
     display: flex;
     flex-direction: column;
-    gap: 0.15rem;
+    gap: 0.25rem;
   }
 
   .source-label {
-    font-size: 0.65rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+    font-size: 0.7rem;
+    font-weight: 600;
     color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
   }
 
   .source-link {
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: var(--accent);
+    color: var(--link-color);
     text-decoration: none;
-    word-break: break-all;
+    font-size: 0.85rem;
   }
 
   .source-link:hover {
@@ -670,65 +671,87 @@
 
   .source-code {
     font-size: 0.8rem;
-    font-weight: 600;
-    color: var(--text-primary);
-    word-break: break-all;
+    color: var(--text-secondary);
+    background: var(--surface);
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
   }
 
-  /* Version list sidebar */
+  .install-section {
+    background: var(--surface);
+    padding: 0.75rem;
+    border-radius: 8px;
+    margin-top: 1rem;
+  }
+
+  .install-label {
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    margin-bottom: 0.35rem;
+  }
+
+  .install-code {
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    display: block;
+  }
+
   .version-list {
     display: flex;
     flex-direction: column;
-    max-height: 400px;
-    overflow-y: auto;
+    gap: 0.35rem;
   }
 
   .version-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 0.4rem;
-    padding: 0.4rem 0.5rem;
+    padding: 0.5rem 0.65rem;
     border-radius: 6px;
     text-decoration: none;
     color: inherit;
-    transition: background 0.1s;
   }
 
   .version-row:hover {
-    background: var(--bg-secondary);
+    background: var(--surface);
   }
 
   .version-row.active {
-    background: rgba(29, 78, 216, 0.08);
-    border: 1px solid rgba(29, 78, 216, 0.15);
+    background: #eef2ff;
   }
 
   .version-name {
-    font-size: 0.8rem;
-    font-weight: 600;
-    font-family:
-      ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    color: var(--text-primary);
     display: flex;
     align-items: center;
-    gap: 0.3rem;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    gap: 0.4rem;
+    font-size: 0.85rem;
+    font-family: ui-monospace, monospace;
+  }
+
+  .latest-badge.sm {
+    font-size: 0.55rem;
+    padding: 0.1rem 0.25rem;
+  }
+
+  .checks-pill.sm {
+    padding: 0.2rem 0.5rem;
+    font-size: 0.7rem;
+  }
+
+  .version-count {
+    background: var(--surface);
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+    padding: 0.15rem 0.4rem;
+    border-radius: 12px;
   }
 
   .empty-text {
-    font-size: 0.8rem;
+    font-size: 0.85rem;
     color: var(--text-secondary);
-    padding: 0.5rem 0;
-    margin: 0;
-  }
-
-  @media (max-width: 768px) {
-    .layout {
-      grid-template-columns: 1fr;
-    }
+    font-style: italic;
+    text-align: center;
+    padding: 1rem;
   }
 </style>

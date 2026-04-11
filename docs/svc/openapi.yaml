@@ -419,6 +419,7 @@ components:
         VersionSummary:
             properties:
                 behavior_passed:
+                    nullable: true
                     type: boolean
                 has_attestation:
                     type: boolean

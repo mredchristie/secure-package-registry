@@ -473,10 +473,10 @@ SELECT
      FROM package_version_tags pvt
      JOIN package_tag_types ptt ON ptt.id = pvt.tag_type
      WHERE pvt.package_version = pv.id AND ptt.label = 'oss_rebuild'), false)::bool AS has_oss_rebuild,
-    COALESCE((SELECT pvt.value = 'true'
+    (SELECT pvt.value
      FROM package_version_tags pvt
      JOIN package_tag_types ptt ON ptt.id = pvt.tag_type
-     WHERE pvt.package_version = pv.id AND ptt.label = 'behavior_passed'), false)::bool AS behavior_passed,
+     WHERE pvt.package_version = pv.id AND ptt.label = 'behavior_passed') AS behavior_passed,
     (SELECT pvt.value
      FROM package_version_tags pvt
      JOIN package_tag_types ptt ON ptt.id = pvt.tag_type
