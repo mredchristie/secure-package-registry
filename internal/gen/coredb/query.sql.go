@@ -11,6 +11,71 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const checkPackagePolicy = `-- name: CheckPackagePolicy :one
+SELECT
+    pd.id AS dep_id,
+    COALESCE(att.value = 'true'::jsonb, false)::bool AS has_attestation,
+    COALESCE(oss.value = 'true'::jsonb, false)::bool AS has_oss_rebuild,
+    COALESCE(beh.value = 'true'::jsonb, false)::bool AS behavior_passed,
+    COALESCE(man.value = 'true'::jsonb, false)::bool AS manually_approved
+FROM project_dependencies pd
+JOIN packages p ON p.id = pd.package_id
+JOIN package_versions pv ON pv.id = pd.package_version_id
+LEFT JOIN package_version_tags att
+    ON att.package_version = pd.package_version_id
+    AND att.tag_type = (SELECT id FROM package_tag_types WHERE label = 'upstream_attestation')
+LEFT JOIN package_version_tags oss
+    ON oss.package_version = pd.package_version_id
+    AND oss.tag_type = (SELECT id FROM package_tag_types WHERE label = 'oss_rebuild')
+LEFT JOIN package_version_tags beh
+    ON beh.package_version = pd.package_version_id
+    AND beh.tag_type = (SELECT id FROM package_tag_types WHERE label = 'behavior_passed')
+LEFT JOIN package_version_tags man
+    ON man.package_version = pd.package_version_id
+    AND man.tag_type = (SELECT id FROM package_tag_types WHERE label = 'manually_approved')
+WHERE pd.project_id = $1
+  AND p.ecosystem = $2
+  AND p.identifier = $3
+  AND pv.version = $4
+LIMIT 1
+`
+
+type CheckPackagePolicyParams struct {
+	ProjectID  int32
+	Ecosystem  Ecosystem
+	Identifier string
+	Version    string
+}
+
+type CheckPackagePolicyRow struct {
+	DepID            int32
+	HasAttestation   bool
+	HasOssRebuild    bool
+	BehaviorPassed   bool
+	ManuallyApproved bool
+}
+
+// Given a project and a package (by ecosystem+identifier+version), checks whether
+// the package is in the project's dependency set and returns its tag values.
+// Returns sql.ErrNoRows if the package is not in the dep set (→ block).
+func (q *Queries) CheckPackagePolicy(ctx context.Context, arg CheckPackagePolicyParams) (CheckPackagePolicyRow, error) {
+	row := q.db.QueryRow(ctx, checkPackagePolicy,
+		arg.ProjectID,
+		arg.Ecosystem,
+		arg.Identifier,
+		arg.Version,
+	)
+	var i CheckPackagePolicyRow
+	err := row.Scan(
+		&i.DepID,
+		&i.HasAttestation,
+		&i.HasOssRebuild,
+		&i.BehaviorPassed,
+		&i.ManuallyApproved,
+	)
+	return i, err
+}
+
 const countSearchPackages = `-- name: CountSearchPackages :one
 SELECT COUNT(*)
 FROM packages p
@@ -42,6 +107,21 @@ type DeleteProjectParams struct {
 
 func (q *Queries) DeleteProject(ctx context.Context, arg DeleteProjectParams) error {
 	_, err := q.db.Exec(ctx, deleteProject, arg.ID, arg.UserID)
+	return err
+}
+
+const deleteProjectAPIKey = `-- name: DeleteProjectAPIKey :exec
+DELETE FROM project_api_keys
+WHERE id = $1 AND project_id = $2
+`
+
+type DeleteProjectAPIKeyParams struct {
+	ID        string
+	ProjectID int32
+}
+
+func (q *Queries) DeleteProjectAPIKey(ctx context.Context, arg DeleteProjectAPIKeyParams) error {
+	_, err := q.db.Exec(ctx, deleteProjectAPIKey, arg.ID, arg.ProjectID)
 	return err
 }
 
@@ -328,20 +408,23 @@ func (q *Queries) GetPackageVersionTags(ctx context.Context, arg GetPackageVersi
 }
 
 const getProject = `-- name: GetProject :one
-SELECT id, user_id, name, source_type, status, generation, created_at, updated_at
+SELECT id, user_id, name, source_type, status, generation, require_provenance, require_behavior, allow_manual_review, created_at, updated_at
 FROM user_projects
 WHERE id = $1
 `
 
 type GetProjectRow struct {
-	ID         int32
-	UserID     string
-	Name       string
-	SourceType string
-	Status     string
-	Generation int32
-	CreatedAt  pgtype.Timestamptz
-	UpdatedAt  pgtype.Timestamptz
+	ID                int32
+	UserID            string
+	Name              string
+	SourceType        string
+	Status            string
+	Generation        int32
+	RequireProvenance bool
+	RequireBehavior   bool
+	AllowManualReview bool
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
 }
 
 func (q *Queries) GetProject(ctx context.Context, id int32) (GetProjectRow, error) {
@@ -354,14 +437,55 @@ func (q *Queries) GetProject(ctx context.Context, id int32) (GetProjectRow, erro
 		&i.SourceType,
 		&i.Status,
 		&i.Generation,
+		&i.RequireProvenance,
+		&i.RequireBehavior,
+		&i.AllowManualReview,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
 }
 
+const getProjectByAPIKey = `-- name: GetProjectByAPIKey :one
+SELECT
+    up.id,
+    up.user_id,
+    up.name,
+    up.require_provenance,
+    up.require_behavior,
+    up.allow_manual_review
+FROM project_api_keys pak
+JOIN user_projects up ON up.id = pak.project_id
+WHERE pak.key_hash = $1
+  AND (pak.expires_at IS NULL OR pak.expires_at > NOW())
+`
+
+type GetProjectByAPIKeyRow struct {
+	ID                int32
+	UserID            string
+	Name              string
+	RequireProvenance bool
+	RequireBehavior   bool
+	AllowManualReview bool
+}
+
+// Looks up a project by hashed API key. Returns the project with policy fields.
+func (q *Queries) GetProjectByAPIKey(ctx context.Context, keyHash string) (GetProjectByAPIKeyRow, error) {
+	row := q.db.QueryRow(ctx, getProjectByAPIKey, keyHash)
+	var i GetProjectByAPIKeyRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.RequireProvenance,
+		&i.RequireBehavior,
+		&i.AllowManualReview,
+	)
+	return i, err
+}
+
 const getProjectByUserAndName = `-- name: GetProjectByUserAndName :one
-SELECT id, user_id, name, source_type, status, generation, created_at, updated_at
+SELECT id, user_id, name, source_type, status, generation, require_provenance, require_behavior, allow_manual_review, created_at, updated_at
 FROM user_projects
 WHERE user_id = $1 AND name = $2
 `
@@ -372,14 +496,17 @@ type GetProjectByUserAndNameParams struct {
 }
 
 type GetProjectByUserAndNameRow struct {
-	ID         int32
-	UserID     string
-	Name       string
-	SourceType string
-	Status     string
-	Generation int32
-	CreatedAt  pgtype.Timestamptz
-	UpdatedAt  pgtype.Timestamptz
+	ID                int32
+	UserID            string
+	Name              string
+	SourceType        string
+	Status            string
+	Generation        int32
+	RequireProvenance bool
+	RequireBehavior   bool
+	AllowManualReview bool
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
 }
 
 func (q *Queries) GetProjectByUserAndName(ctx context.Context, arg GetProjectByUserAndNameParams) (GetProjectByUserAndNameRow, error) {
@@ -392,6 +519,9 @@ func (q *Queries) GetProjectByUserAndName(ctx context.Context, arg GetProjectByU
 		&i.SourceType,
 		&i.Status,
 		&i.Generation,
+		&i.RequireProvenance,
+		&i.RequireBehavior,
+		&i.AllowManualReview,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -399,7 +529,7 @@ func (q *Queries) GetProjectByUserAndName(ctx context.Context, arg GetProjectByU
 }
 
 const getProjectForProcessing = `-- name: GetProjectForProcessing :one
-SELECT id, user_id, name, source_type, status, source_file, generation, created_at, updated_at
+SELECT id, user_id, name, source_type, status, source_file, generation, require_provenance, require_behavior, allow_manual_review, created_at, updated_at
 FROM user_projects
 WHERE id = $1
 `
@@ -417,8 +547,38 @@ func (q *Queries) GetProjectForProcessing(ctx context.Context, id int32) (UserPr
 		&i.Status,
 		&i.SourceFile,
 		&i.Generation,
+		&i.RequireProvenance,
+		&i.RequireBehavior,
+		&i.AllowManualReview,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getProjectPolicy = `-- name: GetProjectPolicy :one
+
+SELECT id, require_provenance, require_behavior, allow_manual_review
+FROM user_projects
+WHERE id = $1
+`
+
+type GetProjectPolicyRow struct {
+	ID                int32
+	RequireProvenance bool
+	RequireBehavior   bool
+	AllowManualReview bool
+}
+
+// Project policy queries
+func (q *Queries) GetProjectPolicy(ctx context.Context, id int32) (GetProjectPolicyRow, error) {
+	row := q.db.QueryRow(ctx, getProjectPolicy, id)
+	var i GetProjectPolicyRow
+	err := row.Scan(
+		&i.ID,
+		&i.RequireProvenance,
+		&i.RequireBehavior,
+		&i.AllowManualReview,
 	)
 	return i, err
 }
@@ -755,7 +915,7 @@ ON CONFLICT (user_id, name) DO UPDATE SET
     source_file = EXCLUDED.source_file,
     generation  = user_projects.generation + 1,
     updated_at  = CURRENT_TIMESTAMP
-RETURNING id, user_id, name, source_type, status, source_file, generation, created_at, updated_at
+RETURNING id, user_id, name, source_type, status, source_file, generation, require_provenance, require_behavior, allow_manual_review, created_at, updated_at
 `
 
 type InsertProjectParams struct {
@@ -785,10 +945,41 @@ func (q *Queries) InsertProject(ctx context.Context, arg InsertProjectParams) (U
 		&i.Status,
 		&i.SourceFile,
 		&i.Generation,
+		&i.RequireProvenance,
+		&i.RequireBehavior,
+		&i.AllowManualReview,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const insertProjectAPIKey = `-- name: InsertProjectAPIKey :exec
+
+INSERT INTO project_api_keys (id, project_id, name, key_hash, prefix, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6)
+`
+
+type InsertProjectAPIKeyParams struct {
+	ID        string
+	ProjectID int32
+	Name      string
+	KeyHash   string
+	Prefix    string
+	ExpiresAt pgtype.Timestamptz
+}
+
+// Project API key queries
+func (q *Queries) InsertProjectAPIKey(ctx context.Context, arg InsertProjectAPIKeyParams) error {
+	_, err := q.db.Exec(ctx, insertProjectAPIKey,
+		arg.ID,
+		arg.ProjectID,
+		arg.Name,
+		arg.KeyHash,
+		arg.Prefix,
+		arg.ExpiresAt,
+	)
+	return err
 }
 
 const insertProjectDependency = `-- name: InsertProjectDependency :exec
@@ -1161,6 +1352,49 @@ func (q *Queries) ListPackagesByEcosystem(ctx context.Context, ecosystem Ecosyst
 	return items, nil
 }
 
+const listProjectAPIKeys = `-- name: ListProjectAPIKeys :many
+SELECT id, project_id, name, prefix, expires_at, created_at
+FROM project_api_keys
+WHERE project_id = $1
+ORDER BY created_at DESC
+`
+
+type ListProjectAPIKeysRow struct {
+	ID        string
+	ProjectID int32
+	Name      string
+	Prefix    string
+	ExpiresAt pgtype.Timestamptz
+	CreatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) ListProjectAPIKeys(ctx context.Context, projectID int32) ([]ListProjectAPIKeysRow, error) {
+	rows, err := q.db.Query(ctx, listProjectAPIKeys, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListProjectAPIKeysRow
+	for rows.Next() {
+		var i ListProjectAPIKeysRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.Name,
+			&i.Prefix,
+			&i.ExpiresAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listProjectDependencies = `-- name: ListProjectDependencies :many
 SELECT
     pd.id,
@@ -1246,21 +1480,24 @@ func (q *Queries) ListProjectDependencies(ctx context.Context, arg ListProjectDe
 }
 
 const listUserProjects = `-- name: ListUserProjects :many
-SELECT id, user_id, name, source_type, status, generation, created_at, updated_at
+SELECT id, user_id, name, source_type, status, generation, require_provenance, require_behavior, allow_manual_review, created_at, updated_at
 FROM user_projects
 WHERE user_id = $1
 ORDER BY updated_at DESC
 `
 
 type ListUserProjectsRow struct {
-	ID         int32
-	UserID     string
-	Name       string
-	SourceType string
-	Status     string
-	Generation int32
-	CreatedAt  pgtype.Timestamptz
-	UpdatedAt  pgtype.Timestamptz
+	ID                int32
+	UserID            string
+	Name              string
+	SourceType        string
+	Status            string
+	Generation        int32
+	RequireProvenance bool
+	RequireBehavior   bool
+	AllowManualReview bool
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
 }
 
 func (q *Queries) ListUserProjects(ctx context.Context, userID string) ([]ListUserProjectsRow, error) {
@@ -1279,6 +1516,9 @@ func (q *Queries) ListUserProjects(ctx context.Context, userID string) ([]ListUs
 			&i.SourceType,
 			&i.Status,
 			&i.Generation,
+			&i.RequireProvenance,
+			&i.RequireBehavior,
+			&i.AllowManualReview,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -1464,5 +1704,31 @@ type UpdatePackageLatestVersionParams struct {
 
 func (q *Queries) UpdatePackageLatestVersion(ctx context.Context, arg UpdatePackageLatestVersionParams) error {
 	_, err := q.db.Exec(ctx, updatePackageLatestVersion, arg.ID, arg.LatestVersion)
+	return err
+}
+
+const updateProjectPolicy = `-- name: UpdateProjectPolicy :exec
+UPDATE user_projects
+SET require_provenance  = $2,
+    require_behavior    = $3,
+    allow_manual_review = $4,
+    updated_at          = CURRENT_TIMESTAMP
+WHERE id = $1
+`
+
+type UpdateProjectPolicyParams struct {
+	ID                int32
+	RequireProvenance bool
+	RequireBehavior   bool
+	AllowManualReview bool
+}
+
+func (q *Queries) UpdateProjectPolicy(ctx context.Context, arg UpdateProjectPolicyParams) error {
+	_, err := q.db.Exec(ctx, updateProjectPolicy,
+		arg.ID,
+		arg.RequireProvenance,
+		arg.RequireBehavior,
+		arg.AllowManualReview,
+	)
 	return err
 }

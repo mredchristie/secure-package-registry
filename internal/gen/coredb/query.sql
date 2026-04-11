@@ -292,20 +292,20 @@ ON CONFLICT (user_id, name) DO UPDATE SET
     source_file = EXCLUDED.source_file,
     generation  = user_projects.generation + 1,
     updated_at  = CURRENT_TIMESTAMP
-RETURNING id, user_id, name, source_type, status, source_file, generation, created_at, updated_at;
+RETURNING id, user_id, name, source_type, status, source_file, generation, require_provenance, require_behavior, allow_manual_review, created_at, updated_at;
 
 -- name: GetProject :one
-SELECT id, user_id, name, source_type, status, generation, created_at, updated_at
+SELECT id, user_id, name, source_type, status, generation, require_provenance, require_behavior, allow_manual_review, created_at, updated_at
 FROM user_projects
 WHERE id = $1;
 
 -- name: GetProjectByUserAndName :one
-SELECT id, user_id, name, source_type, status, generation, created_at, updated_at
+SELECT id, user_id, name, source_type, status, generation, require_provenance, require_behavior, allow_manual_review, created_at, updated_at
 FROM user_projects
 WHERE user_id = $1 AND name = $2;
 
 -- name: ListUserProjects :many
-SELECT id, user_id, name, source_type, status, generation, created_at, updated_at
+SELECT id, user_id, name, source_type, status, generation, require_provenance, require_behavior, allow_manual_review, created_at, updated_at
 FROM user_projects
 WHERE user_id = $1
 ORDER BY updated_at DESC;
@@ -313,7 +313,7 @@ ORDER BY updated_at DESC;
 -- name: GetProjectForProcessing :one
 -- Fetches the project with its raw source file for background processing.
 -- Used by the consumer to retrieve the file to parse and resolve.
-SELECT id, user_id, name, source_type, status, source_file, generation, created_at, updated_at
+SELECT id, user_id, name, source_type, status, source_file, generation, require_provenance, require_behavior, allow_manual_review, created_at, updated_at
 FROM user_projects
 WHERE id = $1;
 
@@ -457,6 +457,81 @@ WHERE p.ecosystem = $1
   AND p.identifier = $2
   AND pv.version = $3;
 
+-- Project policy queries
+
+-- name: GetProjectPolicy :one
+SELECT id, require_provenance, require_behavior, allow_manual_review
+FROM user_projects
+WHERE id = $1;
+
+-- name: UpdateProjectPolicy :exec
+UPDATE user_projects
+SET require_provenance  = $2,
+    require_behavior    = $3,
+    allow_manual_review = $4,
+    updated_at          = CURRENT_TIMESTAMP
+WHERE id = $1;
+
+-- Project API key queries
+
+-- name: InsertProjectAPIKey :exec
+INSERT INTO project_api_keys (id, project_id, name, key_hash, prefix, expires_at)
+VALUES ($1, $2, $3, $4, $5, $6);
+
+-- name: ListProjectAPIKeys :many
+SELECT id, project_id, name, prefix, expires_at, created_at
+FROM project_api_keys
+WHERE project_id = $1
+ORDER BY created_at DESC;
+
+-- name: DeleteProjectAPIKey :exec
+DELETE FROM project_api_keys
+WHERE id = $1 AND project_id = $2;
+
+-- name: GetProjectByAPIKey :one
+-- Looks up a project by hashed API key. Returns the project with policy fields.
+SELECT
+    up.id,
+    up.user_id,
+    up.name,
+    up.require_provenance,
+    up.require_behavior,
+    up.allow_manual_review
+FROM project_api_keys pak
+JOIN user_projects up ON up.id = pak.project_id
+WHERE pak.key_hash = $1
+  AND (pak.expires_at IS NULL OR pak.expires_at > NOW());
+
+-- name: CheckPackagePolicy :one
+-- Given a project and a package (by ecosystem+identifier+version), checks whether
+-- the package is in the project's dependency set and returns its tag values.
+-- Returns sql.ErrNoRows if the package is not in the dep set (→ block).
+SELECT
+    pd.id AS dep_id,
+    COALESCE(att.value = 'true'::jsonb, false)::bool AS has_attestation,
+    COALESCE(oss.value = 'true'::jsonb, false)::bool AS has_oss_rebuild,
+    COALESCE(beh.value = 'true'::jsonb, false)::bool AS behavior_passed,
+    COALESCE(man.value = 'true'::jsonb, false)::bool AS manually_approved
+FROM project_dependencies pd
+JOIN packages p ON p.id = pd.package_id
+JOIN package_versions pv ON pv.id = pd.package_version_id
+LEFT JOIN package_version_tags att
+    ON att.package_version = pd.package_version_id
+    AND att.tag_type = (SELECT id FROM package_tag_types WHERE label = 'upstream_attestation')
+LEFT JOIN package_version_tags oss
+    ON oss.package_version = pd.package_version_id
+    AND oss.tag_type = (SELECT id FROM package_tag_types WHERE label = 'oss_rebuild')
+LEFT JOIN package_version_tags beh
+    ON beh.package_version = pd.package_version_id
+    AND beh.tag_type = (SELECT id FROM package_tag_types WHERE label = 'behavior_passed')
+LEFT JOIN package_version_tags man
+    ON man.package_version = pd.package_version_id
+    AND man.tag_type = (SELECT id FROM package_tag_types WHERE label = 'manually_approved')
+WHERE pd.project_id = $1
+  AND p.ecosystem = $2
+  AND p.identifier = $3
+  AND pv.version = $4
+LIMIT 1;
 -- name: ListPackageVersionsPublic :many
 -- Lists all versions for a package by ecosystem+identifier, with their verification tags.
 SELECT

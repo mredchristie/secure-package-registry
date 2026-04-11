@@ -175,15 +175,18 @@ ON CONFLICT (label) DO UPDATE SET
 -- v6 — User projects and dependency tracking
 
 CREATE TABLE user_projects (
-    id          SERIAL PRIMARY KEY,
-    user_id     TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
-    name        TEXT NOT NULL,
-    source_type TEXT NOT NULL,
-    status      TEXT NOT NULL DEFAULT 'pending',
-    source_file BYTEA,
-    generation  INT NOT NULL DEFAULT 1,
-    created_at  TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at  TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    id                  SERIAL PRIMARY KEY,
+    user_id             TEXT NOT NULL REFERENCES "user"(id) ON DELETE CASCADE,
+    name                TEXT NOT NULL,
+    source_type         TEXT NOT NULL,
+    status              TEXT NOT NULL DEFAULT 'pending',
+    source_file         BYTEA,
+    generation          INT NOT NULL DEFAULT 1,
+    require_provenance  BOOLEAN NOT NULL DEFAULT TRUE,
+    require_behavior    BOOLEAN NOT NULL DEFAULT TRUE,
+    allow_manual_review BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (user_id, name)
 );
 
@@ -206,4 +209,19 @@ CREATE TABLE project_dependencies (
 CREATE INDEX idx_project_deps_project_id ON project_dependencies(project_id);
 CREATE INDEX idx_project_deps_package_id ON project_dependencies(package_id);
 CREATE INDEX idx_project_deps_version_id ON project_dependencies(package_version_id);
+
+-- v10 — Per-project API keys for reg-proxy authentication
+
+CREATE TABLE project_api_keys (
+    id          TEXT        NOT NULL PRIMARY KEY,
+    project_id  INT         NOT NULL REFERENCES user_projects(id) ON DELETE CASCADE,
+    name        TEXT        NOT NULL,
+    key_hash    TEXT        NOT NULL UNIQUE,
+    prefix      TEXT        NOT NULL,
+    expires_at  TIMESTAMPTZ,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_project_api_keys_project ON project_api_keys(project_id);
+CREATE INDEX idx_project_api_keys_hash    ON project_api_keys(key_hash);
 

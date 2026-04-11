@@ -9,8 +9,13 @@ import (
 )
 
 type Querier interface {
+	// Given a project and a package (by ecosystem+identifier+version), checks whether
+	// the package is in the project's dependency set and returns its tag values.
+	// Returns sql.ErrNoRows if the package is not in the dep set (→ block).
+	CheckPackagePolicy(ctx context.Context, arg CheckPackagePolicyParams) (CheckPackagePolicyRow, error)
 	CountSearchPackages(ctx context.Context, arg CountSearchPackagesParams) (int64, error)
 	DeleteProject(ctx context.Context, arg DeleteProjectParams) error
+	DeleteProjectAPIKey(ctx context.Context, arg DeleteProjectAPIKeyParams) error
 	// Bulk delete all dependencies for a project (used before re-inserting on re-upload).
 	DeleteProjectDependencies(ctx context.Context, projectID int32) error
 	// Marks a project as complete or failed after async processing, clears the
@@ -28,10 +33,14 @@ type Querier interface {
 	GetPackageVersionID(ctx context.Context, arg GetPackageVersionIDParams) (int32, error)
 	GetPackageVersionTags(ctx context.Context, arg GetPackageVersionTagsParams) ([]GetPackageVersionTagsRow, error)
 	GetProject(ctx context.Context, id int32) (GetProjectRow, error)
+	// Looks up a project by hashed API key. Returns the project with policy fields.
+	GetProjectByAPIKey(ctx context.Context, keyHash string) (GetProjectByAPIKeyRow, error)
 	GetProjectByUserAndName(ctx context.Context, arg GetProjectByUserAndNameParams) (GetProjectByUserAndNameRow, error)
 	// Fetches the project with its raw source file for background processing.
 	// Used by the consumer to retrieve the file to parse and resolve.
 	GetProjectForProcessing(ctx context.Context, id int32) (UserProject, error)
+	// Project policy queries
+	GetProjectPolicy(ctx context.Context, id int32) (GetProjectPolicyRow, error)
 	// Aggregated stats for a project, grouped by dependency type.
 	// Returns total count plus counts of deps with each boolean tag set to true.
 	GetProjectSummary(ctx context.Context, projectID int32) ([]GetProjectSummaryRow, error)
@@ -64,6 +73,8 @@ type Querier interface {
 	// the source_type, stores the raw file for async processing, resets status
 	// to pending, and bumps the generation counter.
 	InsertProject(ctx context.Context, arg InsertProjectParams) (UserProject, error)
+	// Project API key queries
+	InsertProjectAPIKey(ctx context.Context, arg InsertProjectAPIKeyParams) error
 	// Inserts a single project dependency. ON CONFLICT ignores duplicates.
 	InsertProjectDependency(ctx context.Context, arg InsertProjectDependencyParams) error
 	InsertTagType(ctx context.Context, arg InsertTagTypeParams) (int32, error)
@@ -81,6 +92,7 @@ type Querier interface {
 	ListPackageVersionsPublic(ctx context.Context, arg ListPackageVersionsPublicParams) ([]ListPackageVersionsPublicRow, error)
 	// Poller queries
 	ListPackagesByEcosystem(ctx context.Context, ecosystem Ecosystem) ([]ListPackagesByEcosystemRow, error)
+	ListProjectAPIKeys(ctx context.Context, projectID int32) ([]ListProjectAPIKeysRow, error)
 	// Lists all dependencies for a project with package info and per-dep check statuses.
 	// Optionally filtered by dependency type.
 	// Check fields are NULL when checked_at is NULL (not yet checked), otherwise boolean.
@@ -95,6 +107,7 @@ type Querier interface {
 	UpdateCollectionTaskStatus(ctx context.Context, arg UpdateCollectionTaskStatusParams) error
 	UpdateCollectionTaskSucceeded(ctx context.Context, arg UpdateCollectionTaskSucceededParams) error
 	UpdatePackageLatestVersion(ctx context.Context, arg UpdatePackageLatestVersionParams) error
+	UpdateProjectPolicy(ctx context.Context, arg UpdateProjectPolicyParams) error
 }
 
 var _ Querier = (*Queries)(nil)

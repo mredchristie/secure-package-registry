@@ -315,6 +315,16 @@ type PackageVersionTag struct {
 	UpdatedAt      pgtype.Timestamptz
 }
 
+type ProjectApiKey struct {
+	ID        string
+	ProjectID int32
+	Name      string
+	KeyHash   string
+	Prefix    string
+	ExpiresAt pgtype.Timestamptz
+	CreatedAt pgtype.Timestamptz
+}
+
 type ProjectDependency struct {
 	ID                int32
 	ProjectID         int32
@@ -349,15 +359,18 @@ type User struct {
 }
 
 type UserProject struct {
-	ID         int32
-	UserID     string
-	Name       string
-	SourceType string
-	Status     string
-	SourceFile []byte
-	Generation int32
-	CreatedAt  pgtype.Timestamptz
-	UpdatedAt  pgtype.Timestamptz
+	ID                int32
+	UserID            string
+	Name              string
+	SourceType        string
+	Status            string
+	SourceFile        []byte
+	Generation        int32
+	RequireProvenance bool
+	RequireBehavior   bool
+	AllowManualReview bool
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
 }
 
 type Verification struct {
