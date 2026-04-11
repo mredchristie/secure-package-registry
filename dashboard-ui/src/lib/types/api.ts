@@ -212,3 +212,23 @@ export interface ProjectSummaryResponse {
 	project_id: number;
 	summary: ProjectSummaryRow[];
 }
+
+// Admin review queue types
+
+export interface ReviewQueueItem {
+	ecosystem: string;
+	identifier: string;
+	is_latest: boolean;
+	manually_approved: boolean | null;
+	review_comment: string | null;
+	version: string;
+}
+
+export interface ReviewQueueResponse {
+	items: ReviewQueueItem[];
+}
+
+export interface ReviewStatusResponse {
+	manually_approved: boolean | null;
+	review_comment: string | null;
+}

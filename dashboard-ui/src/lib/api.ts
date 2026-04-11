@@ -13,6 +13,8 @@ import type {
 	ProcessTree,
 	Project,
 	ProjectSummaryResponse,
+	ReviewQueueResponse,
+	ReviewStatusResponse,
 	SearchResult,
 	TriggerScanRequest,
 	TriggerScanResponse,
@@ -102,8 +104,32 @@ export const packagesAPI = {
 		);
 	},
 
+	getReviewStatus: (
+		ecosystem: string,
+		identifier: string,
+		version: string,
+	): Promise<ReviewStatusResponse> => {
+		return fetchJSON(
+			`${API_BASE}/admin/packages/${encodeURIComponent(ecosystem)}/${encodeURIComponent(identifier)}/versions/${encodeURIComponent(version)}/review`,
+		);
+	},
+
 	list: (ecosystem: Ecosystem): Promise<ListPackagesResponse> => {
 		return fetchJSON(`${API_BASE}/admin/packages?ecosystem=${ecosystem}`);
+	},
+
+	reviewQueue: (params?: {
+		ecosystem?: string;
+		status?: string;
+	}): Promise<ReviewQueueResponse> => {
+		const searchParams = new URLSearchParams();
+		if (params?.ecosystem) searchParams.set("ecosystem", params.ecosystem);
+		if (params?.status) searchParams.set("status", params.status);
+		const qs = searchParams.toString();
+		const url = qs
+			? `${API_BASE}/admin/review?${qs}`
+			: `${API_BASE}/admin/review`;
+		return fetchJSON(url);
 	},
 
 	scan: (
@@ -113,6 +139,21 @@ export const packagesAPI = {
 	): Promise<TriggerScanResponse> => {
 		return fetchJSON(
 			`${API_BASE}/admin/packages/${encodeURIComponent(ecosystem)}/${encodeURIComponent(identifier)}/scan`,
+			{
+				body: JSON.stringify(data),
+				method: "POST",
+			},
+		);
+	},
+
+	submitReview: (
+		ecosystem: string,
+		identifier: string,
+		version: string,
+		data: { approved: boolean; comment: string },
+	): Promise<ReviewStatusResponse> => {
+		return fetchJSON(
+			`${API_BASE}/admin/packages/${encodeURIComponent(ecosystem)}/${encodeURIComponent(identifier)}/versions/${encodeURIComponent(version)}/review`,
 			{
 				body: JSON.stringify(data),
 				method: "POST",

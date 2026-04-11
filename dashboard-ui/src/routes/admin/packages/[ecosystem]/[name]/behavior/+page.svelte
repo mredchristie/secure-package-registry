@@ -5,6 +5,7 @@
     ProcessTree,
     ProcessNode,
     ProcessBehaviors,
+    ReviewStatusResponse,
   } from "$lib/types/api";
   import {
     ArrowLeft,
@@ -19,6 +20,10 @@
     Wifi,
     LoaderCircle,
     CircleAlert,
+    CheckCircle2,
+    XCircle,
+    Clock,
+    MessageSquare,
   } from "lucide-svelte";
 
   let ecosystem = $derived($page.params.ecosystem ?? "");
@@ -87,6 +92,7 @@
   $effect(() => {
     if (ecosystem && name && version) {
       loadBehavior();
+      loadReviewStatus();
     }
   });
 
@@ -149,6 +155,65 @@
 
   let expandedNodes = $state<Set<string>>(new Set());
   let expandedDetails = $state<Set<string>>(new Set());
+
+  // Review panel state
+  let reviewStatus = $state<ReviewStatusResponse | null>(null);
+  let reviewLoading = $state(false);
+  let reviewError = $state<string | null>(null);
+  let reviewApproved = $state(true);
+  let reviewComment = $state("");
+  let submitting = $state(false);
+  let submitError = $state<string | null>(null);
+  let submitSuccess = $state<string | null>(null);
+
+  async function loadReviewStatus() {
+    if (!version) return;
+    reviewLoading = true;
+    reviewError = null;
+    try {
+      reviewStatus = await packagesAPI.getReviewStatus(
+        ecosystem,
+        name,
+        version,
+      );
+      // Pre-fill form from existing review
+      if (reviewStatus.manually_approved !== null) {
+        reviewApproved = reviewStatus.manually_approved;
+      }
+      if (reviewStatus.review_comment) {
+        reviewComment = reviewStatus.review_comment;
+      }
+    } catch (e) {
+      reviewError =
+        e instanceof Error ? e.message : "Failed to load review status";
+    } finally {
+      reviewLoading = false;
+    }
+  }
+
+  async function handleSubmitReview() {
+    if (!reviewComment.trim()) {
+      submitError = "A review comment is required";
+      return;
+    }
+    submitting = true;
+    submitError = null;
+    submitSuccess = null;
+    try {
+      reviewStatus = await packagesAPI.submitReview(ecosystem, name, version, {
+        approved: reviewApproved,
+        comment: reviewComment.trim(),
+      });
+      submitSuccess = reviewApproved ? "Version approved" : "Version rejected";
+      setTimeout(() => {
+        submitSuccess = null;
+      }, 3000);
+    } catch (e) {
+      submitError = e instanceof Error ? e.message : "Failed to submit review";
+    } finally {
+      submitting = false;
+    }
+  }
 
   function toggleNode(identity: string) {
     const next = new Set(expandedNodes);
@@ -332,6 +397,115 @@
         </div>
       </div>
     {/if}
+  {/if}
+
+  <!-- Review Panel -->
+  {#if !loading && dedupedTree}
+    <div class="review-panel">
+      <div class="review-header">
+        <MessageSquare class="review-header-icon" />
+        <h2 class="review-heading">Manual Review</h2>
+        {#if reviewStatus?.manually_approved !== null && reviewStatus?.manually_approved !== undefined}
+          {#if reviewStatus.manually_approved}
+            <span class="review-status-badge review-status-approved">
+              <CheckCircle2 class="review-status-icon" />
+              Approved
+            </span>
+          {:else}
+            <span class="review-status-badge review-status-rejected">
+              <XCircle class="review-status-icon" />
+              Rejected
+            </span>
+          {/if}
+        {:else}
+          <span class="review-status-badge review-status-pending">
+            <Clock class="review-status-icon" />
+            Pending Review
+          </span>
+        {/if}
+      </div>
+
+      {#if reviewLoading}
+        <div class="review-loading">
+          <LoaderCircle class="spinner-sm" />
+          <span>Loading review status...</span>
+        </div>
+      {:else if reviewError}
+        <div class="review-alert review-alert-error">
+          {reviewError}
+        </div>
+      {:else}
+        {#if reviewStatus?.review_comment}
+          <div class="existing-comment">
+            <p class="existing-comment-label">Current comment:</p>
+            <p class="existing-comment-text">{reviewStatus.review_comment}</p>
+          </div>
+        {/if}
+
+        <div class="review-form">
+          <div class="review-decision">
+            <label class="radio-label">
+              <input
+                type="radio"
+                name="review-decision"
+                value="approve"
+                checked={reviewApproved}
+                onchange={() => (reviewApproved = true)}
+              />
+              <span class="radio-text radio-approve">Approve</span>
+            </label>
+            <label class="radio-label">
+              <input
+                type="radio"
+                name="review-decision"
+                value="reject"
+                checked={!reviewApproved}
+                onchange={() => (reviewApproved = false)}
+              />
+              <span class="radio-text radio-reject">Reject</span>
+            </label>
+          </div>
+
+          <div class="review-comment-field">
+            <label class="review-form-label" for="reviewComment">
+              Comment <span class="required">*</span>
+            </label>
+            <textarea
+              id="reviewComment"
+              bind:value={reviewComment}
+              placeholder="Explain the review decision..."
+              rows="3"
+              class="review-textarea"
+            ></textarea>
+          </div>
+
+          {#if submitError}
+            <div class="review-alert review-alert-error">
+              {submitError}
+            </div>
+          {/if}
+
+          {#if submitSuccess}
+            <div class="review-alert review-alert-success">
+              {submitSuccess}
+            </div>
+          {/if}
+
+          <button
+            onclick={handleSubmitReview}
+            disabled={submitting}
+            class="review-submit"
+            class:submit-approve={reviewApproved}
+            class:submit-reject={!reviewApproved}
+          >
+            {#if submitting}
+              <LoaderCircle class="spinner-sm" />
+            {/if}
+            {reviewApproved ? "Approve Version" : "Reject Version"}
+          </button>
+        </div>
+      {/if}
+    </div>
   {/if}
 </div>
 
@@ -1040,5 +1214,229 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  /* Review Panel */
+  .review-panel {
+    margin-top: 2rem;
+    border-radius: 8px;
+    border: 1px solid var(--card-border);
+    background: var(--card-bg);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    padding: 1.25rem;
+  }
+
+  .review-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .review-header :global(.review-header-icon) {
+    width: 1.25rem;
+    height: 1.25rem;
+    color: var(--text-secondary);
+  }
+
+  .review-heading {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    flex: 1;
+  }
+
+  .review-status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.625rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border-radius: 999px;
+  }
+
+  .review-status-badge :global(.review-status-icon) {
+    width: 0.875rem;
+    height: 0.875rem;
+  }
+
+  .review-status-approved {
+    background: rgba(22, 163, 74, 0.12);
+    color: #15803d;
+  }
+
+  .review-status-rejected {
+    background: rgba(220, 38, 38, 0.12);
+    color: #dc2626;
+  }
+
+  .review-status-pending {
+    background: rgba(234, 179, 8, 0.12);
+    color: #a16207;
+  }
+
+  .review-loading {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 1rem 0;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+  }
+
+  .review-loading :global(.spinner-sm) {
+    width: 1rem;
+    height: 1rem;
+    animation: spin 1s linear infinite;
+  }
+
+  .existing-comment {
+    margin-bottom: 1rem;
+    padding: 0.75rem;
+    border-radius: 6px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+  }
+
+  .existing-comment-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 0.25rem;
+  }
+
+  .existing-comment-text {
+    font-size: 0.875rem;
+    color: var(--text-primary);
+    white-space: pre-wrap;
+  }
+
+  .review-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .review-decision {
+    display: flex;
+    gap: 1rem;
+  }
+
+  .radio-label {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    cursor: pointer;
+  }
+
+  .radio-text {
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+
+  .radio-approve {
+    color: #15803d;
+  }
+
+  .radio-reject {
+    color: #dc2626;
+  }
+
+  .review-comment-field {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .review-form-label {
+    margin-bottom: 0.375rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .required {
+    color: #dc2626;
+  }
+
+  .review-textarea {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    font-family: inherit;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  .review-textarea::placeholder {
+    color: var(--text-secondary);
+  }
+
+  .review-textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.15);
+  }
+
+  .review-alert {
+    padding: 0.625rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.875rem;
+  }
+
+  .review-alert-error {
+    background: rgba(220, 38, 38, 0.08);
+    color: #dc2626;
+  }
+
+  .review-alert-success {
+    background: rgba(22, 163, 74, 0.08);
+    color: #16a34a;
+  }
+
+  .review-submit {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    align-self: flex-start;
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  .review-submit:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .review-submit :global(.spinner-sm) {
+    width: 1rem;
+    height: 1rem;
+    animation: spin 1s linear infinite;
+  }
+
+  .submit-approve {
+    background: #16a34a;
+  }
+
+  .submit-approve:hover:not(:disabled) {
+    background: #15803d;
+  }
+
+  .submit-reject {
+    background: #dc2626;
+  }
+
+  .submit-reject:hover:not(:disabled) {
+    background: #b91c1c;
   }
 </style>

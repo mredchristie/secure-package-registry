@@ -30,7 +30,7 @@ CREATE TABLE package_versions (
 
 CREATE INDEX idx_versions_lookup ON package_versions (package_id, version);
 
-CREATE TYPE PKG_VTYPE AS ENUM ('integer', 'boolean', 'float');
+CREATE TYPE PKG_VTYPE AS ENUM ('integer', 'boolean', 'float', 'text');
 
 CREATE TABLE package_tag_types (
     id SERIAL PRIMARY KEY,
@@ -166,7 +166,8 @@ INSERT INTO package_tag_types (label, description, value_type) VALUES
     ('behavior_passed',   'Package version passed behavioral analysis',         'boolean'),
     ('upstream_attestation', 'Package version has attestation from upstream registry', 'boolean'),
     ('oss_rebuild',       'Package version verified via OSS rebuild',           'boolean'),
-    ('manually_approved', 'Package version has been manually approved',         'boolean')
+    ('manually_approved', 'Package version has been manually approved',         'boolean'),
+    ('review_comment',    'Free-text comment from a manual review',             'text')
 ON CONFLICT (label) DO UPDATE SET
     description = EXCLUDED.description,
     value_type  = EXCLUDED.value_type;

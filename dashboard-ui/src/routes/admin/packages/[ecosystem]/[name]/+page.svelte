@@ -61,7 +61,7 @@
 </script>
 
 <div class="page">
-  <a href="/admin" class="back-link">
+  <a href="/admin/packages" class="back-link">
     <ArrowLeft class="icon-back" />
     Back to packages
   </a>

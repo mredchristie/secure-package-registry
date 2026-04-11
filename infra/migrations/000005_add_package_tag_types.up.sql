@@ -6,7 +6,8 @@ INSERT INTO package_tag_types (label, description, value_type) VALUES
     ('behavior_passed',   'Package version passed behavioral analysis',         'boolean'),
     ('upstream_attestation', 'Package version has attestation from upstream registry', 'boolean'),
     ('oss_rebuild',       'Package version verified via OSS rebuild',           'boolean'),
-    ('manually_approved', 'Package version has been manually approved',         'boolean')
+    ('manually_approved', 'Package version has been manually approved',         'boolean'),
+    ('review_comment',   'Free-text comment from a manual review',             'text')
 ON CONFLICT (label) DO UPDATE SET
     description = EXCLUDED.description,
     value_type  = EXCLUDED.value_type;

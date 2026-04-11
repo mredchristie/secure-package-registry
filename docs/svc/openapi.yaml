@@ -233,6 +233,39 @@ components:
                 version:
                     type: string
             type: object
+        ReviewQueueItem:
+            properties:
+                ecosystem:
+                    type: string
+                identifier:
+                    type: string
+                is_latest:
+                    type: boolean
+                manually_approved:
+                    nullable: true
+                    type: boolean
+                review_comment:
+                    nullable: true
+                    type: string
+                version:
+                    type: string
+            type: object
+        ReviewQueueResponse:
+            properties:
+                items:
+                    items:
+                        $ref: '#/components/schemas/ReviewQueueItem'
+                    type: array
+            type: object
+        ReviewStatusResponse:
+            properties:
+                manually_approved:
+                    nullable: true
+                    type: boolean
+                review_comment:
+                    nullable: true
+                    type: string
+            type: object
         SearchResult:
             properties:
                 items:
@@ -256,6 +289,13 @@ components:
                 tag:
                     type: string
                 url:
+                    type: string
+            type: object
+        SubmitReviewRequest:
+            properties:
+                approved:
+                    type: boolean
+                comment:
                     type: string
             type: object
         SummaryRow:
@@ -663,6 +703,150 @@ paths:
                                 $ref: '#/components/schemas/ErrorResponse'
                     description: Internal Server Error
             summary: List package versions
+            tags:
+                - Admin
+    /api/v1/admin/packages/{ecosystem}/{identifier}/versions/{version}/review:
+        get:
+            description: Get the current manual review status and comment for a specific package version.
+            operationId: adminGetReviewStatus
+            parameters:
+                - in: path
+                  name: ecosystem
+                  required: true
+                  schema:
+                    type: string
+                - in: path
+                  name: identifier
+                  required: true
+                  schema:
+                    type: string
+                - in: path
+                  name: version
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ReviewStatusResponse'
+                    description: OK
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: Bad Request
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: Not Found
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: Internal Server Error
+            summary: Get review status
+            tags:
+                - Admin
+        post:
+            description: Submit a manual review (approve/reject with comment) for a package version.
+            operationId: adminSubmitReview
+            parameters:
+                - in: path
+                  name: ecosystem
+                  required: true
+                  schema:
+                    type: string
+                - in: path
+                  name: identifier
+                  required: true
+                  schema:
+                    type: string
+                - in: path
+                  name: version
+                  required: true
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SubmitReviewRequest'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ReviewStatusResponse'
+                    description: OK
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: Bad Request
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: Not Found
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: Internal Server Error
+            summary: Submit review
+            tags:
+                - Admin
+    /api/v1/admin/review:
+        get:
+            description: List package versions that failed behavioral analysis, with their manual review status.
+            operationId: adminListReviewQueue
+            parameters:
+                - description: Filter by ecosystem
+                  in: query
+                  name: ecosystem
+                  schema:
+                    type: string
+                - description: 'Filter by review status: unreviewed, approved, rejected, or all (default)'
+                  in: query
+                  name: status
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ReviewQueueResponse'
+                    description: OK
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: Bad Request
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: Not Found
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ErrorResponse'
+                    description: Internal Server Error
+            summary: List review queue
             tags:
                 - Admin
     /api/v1/admin/tasks:

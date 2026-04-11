@@ -546,6 +546,42 @@ func (q *Queries) GetTagTypeByLabel(ctx context.Context, label string) (int32, e
 	return id, err
 }
 
+const getVersionReviewStatus = `-- name: GetVersionReviewStatus :one
+SELECT
+    (SELECT pvt.value
+     FROM package_version_tags pvt
+     JOIN package_tag_types ptt ON ptt.id = pvt.tag_type
+     WHERE pvt.package_version = pv.id AND ptt.label = 'manually_approved') AS manually_approved,
+    (SELECT pvt.value
+     FROM package_version_tags pvt
+     JOIN package_tag_types ptt ON ptt.id = pvt.tag_type
+     WHERE pvt.package_version = pv.id AND ptt.label = 'review_comment') AS review_comment
+FROM package_versions pv
+JOIN packages p ON p.id = pv.package_id
+WHERE p.ecosystem = $1
+  AND p.identifier = $2
+  AND pv.version = $3
+`
+
+type GetVersionReviewStatusParams struct {
+	Ecosystem  Ecosystem
+	Identifier string
+	Version    string
+}
+
+type GetVersionReviewStatusRow struct {
+	ManuallyApproved []byte
+	ReviewComment    []byte
+}
+
+// Gets the manual review status and comment for a specific package version.
+func (q *Queries) GetVersionReviewStatus(ctx context.Context, arg GetVersionReviewStatusParams) (GetVersionReviewStatusRow, error) {
+	row := q.db.QueryRow(ctx, getVersionReviewStatus, arg.Ecosystem, arg.Identifier, arg.Version)
+	var i GetVersionReviewStatusRow
+	err := row.Scan(&i.ManuallyApproved, &i.ReviewComment)
+	return i, err
+}
+
 const hasActiveCollectionTask = `-- name: HasActiveCollectionTask :one
 SELECT EXISTS(
     SELECT 1 FROM collection_tasks
@@ -930,6 +966,72 @@ func (q *Queries) ListPackageVersions(ctx context.Context, packageID int32) ([]s
 			return nil, err
 		}
 		items = append(items, version)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPackageVersionsForReview = `-- name: ListPackageVersionsForReview :many
+SELECT
+    p.identifier,
+    p.ecosystem::text,
+    pv.version,
+    (pv.version = p.latest_version) AS is_latest,
+    (SELECT pvt.value
+     FROM package_version_tags pvt
+     JOIN package_tag_types ptt ON ptt.id = pvt.tag_type
+     WHERE pvt.package_version = pv.id AND ptt.label = 'manually_approved') AS manually_approved,
+    (SELECT pvt.value
+     FROM package_version_tags pvt
+     JOIN package_tag_types ptt ON ptt.id = pvt.tag_type
+     WHERE pvt.package_version = pv.id AND ptt.label = 'review_comment') AS review_comment
+FROM package_versions pv
+JOIN packages p ON p.id = pv.package_id
+JOIN package_version_tags beh ON beh.package_version = pv.id
+    AND beh.tag_type = (SELECT id FROM package_tag_types WHERE label = 'behavior_passed')
+    AND beh.value = 'false'::jsonb
+WHERE ($1::ECOSYSTEM IS NULL OR p.ecosystem = $1::ECOSYSTEM)
+ORDER BY
+    (SELECT pvt.value FROM package_version_tags pvt
+     JOIN package_tag_types ptt ON ptt.id = pvt.tag_type
+     WHERE pvt.package_version = pv.id AND ptt.label = 'manually_approved') IS NULL DESC,
+    p.identifier, pv.version
+`
+
+type ListPackageVersionsForReviewRow struct {
+	Identifier       string
+	PEcosystem       string
+	Version          string
+	IsLatest         bool
+	ManuallyApproved []byte
+	ReviewComment    []byte
+}
+
+// Lists package versions that failed behavioral analysis, with their review status.
+// Used by the admin review queue. Optionally filtered by ecosystem.
+// Sorted: unreviewed first (NULL manually_approved), then by identifier.
+func (q *Queries) ListPackageVersionsForReview(ctx context.Context, ecosystem NullEcosystem) ([]ListPackageVersionsForReviewRow, error) {
+	rows, err := q.db.Query(ctx, listPackageVersionsForReview, ecosystem)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPackageVersionsForReviewRow
+	for rows.Next() {
+		var i ListPackageVersionsForReviewRow
+		if err := rows.Scan(
+			&i.Identifier,
+			&i.PEcosystem,
+			&i.Version,
+			&i.IsLatest,
+			&i.ManuallyApproved,
+			&i.ReviewComment,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

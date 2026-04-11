@@ -32,7 +32,7 @@ CREATE TABLE package_versions (
 
 CREATE INDEX idx_versions_lookup ON package_versions (package_id, version);
 
-CREATE TYPE PKG_VTYPE AS ENUM ('integer', 'boolean', 'float');
+CREATE TYPE PKG_VTYPE AS ENUM ('integer', 'boolean', 'float', 'text');
 
 CREATE TABLE package_tag_types (
     id SERIAL PRIMARY KEY,

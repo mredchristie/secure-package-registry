@@ -1,123 +1,91 @@
 <script lang="ts">
   import { packagesAPI } from "$lib/api";
-  import type { Ecosystem, Package } from "$lib/types/api";
-  import { Plus, AlertCircle, Loader2 } from "lucide-svelte";
+  import type { Ecosystem, ReviewQueueItem } from "$lib/types/api";
+  import {
+    AlertCircle,
+    CheckCircle2,
+    Clock,
+    Loader2,
+    ShieldAlert,
+    XCircle,
+  } from "lucide-svelte";
 
   const ecosystems: Ecosystem[] = ["npm", "go", "cargo", "pypi"];
 
   const ecosystemColors: Record<Ecosystem, string> = {
-    npm: "eco-npm",
-    go: "eco-go",
     cargo: "eco-cargo",
+    go: "eco-go",
+    npm: "eco-npm",
     pypi: "eco-pypi",
   };
 
-  function trustColor(score: number): string {
-    if (score >= 90) return "trust-high";
-    if (score >= 70) return "trust-medium";
-    return "trust-low";
-  }
+  type StatusFilter = "all" | "pending" | "approved" | "rejected";
 
-  let selectedEcosystem = $state<Ecosystem>("npm");
-  let packages = $state<Package[]>([]);
+  let selectedEcosystem = $state<string>("");
+  let selectedStatus = $state<StatusFilter>("all");
+  let items = $state<ReviewQueueItem[]>([]);
   let loading = $state(false);
   let error = $state<string | null>(null);
 
-  // Add dialog state
-  let addDialogOpen = $state(false);
-  let newPackageName = $state("");
-  let addError = $state<string | null>(null);
-  let addLoading = $state(false);
-  let addSuccess = $state<string | null>(null);
-
-  async function loadPackages() {
+  async function loadQueue() {
     loading = true;
     error = null;
     try {
-      const response = await packagesAPI.list(selectedEcosystem);
-      packages = response.items;
+      const params: { ecosystem?: string; status?: string } = {};
+      if (selectedEcosystem) params.ecosystem = selectedEcosystem;
+      if (selectedStatus !== "all") params.status = selectedStatus;
+      const response = await packagesAPI.reviewQueue(params);
+      items = response.items;
     } catch (e) {
-      error = e instanceof Error ? e.message : "Failed to load packages";
+      error = e instanceof Error ? e.message : "Failed to load review queue";
     } finally {
       loading = false;
     }
   }
 
-  async function handleAddPackage() {
-    if (!newPackageName.trim()) {
-      addError = "Package name is required";
-      return;
-    }
-
-    addLoading = true;
-    addError = null;
-    addSuccess = null;
-
-    try {
-      const response = await packagesAPI.add({
-        identifier: newPackageName.trim(),
-        ecosystem: selectedEcosystem,
-      });
-
-      if (response.already_exists) {
-        addSuccess = `Package "${response.identifier}" is already tracked`;
-      } else {
-        addSuccess = `Package "${response.identifier}" added successfully`;
-        packages = [
-          ...packages,
-          {
-            id: response.id,
-            identifier: response.identifier,
-            ecosystem: response.ecosystem,
-          },
-        ];
-      }
-
-      newPackageName = "";
-      setTimeout(() => {
-        addDialogOpen = false;
-        addSuccess = null;
-      }, 1500);
-    } catch (e) {
-      addError = e instanceof Error ? e.message : "Failed to add package";
-    } finally {
-      addLoading = false;
-    }
-  }
-
-  function openAddDialog() {
-    addDialogOpen = true;
-    addError = null;
-    addSuccess = null;
-    newPackageName = "";
+  function reviewStatus(
+    item: ReviewQueueItem,
+  ): "approved" | "pending" | "rejected" {
+    if (item.manually_approved === null) return "pending";
+    return item.manually_approved ? "approved" : "rejected";
   }
 
   $effect(() => {
-    loadPackages();
+    loadQueue();
   });
 </script>
 
 <div class="page">
   <div class="page-header">
     <div>
-      <h1 class="page-title">Packages</h1>
-      <p class="page-subtitle">Manage tracked packages</p>
+      <h1 class="page-title">Review Queue</h1>
+      <p class="page-subtitle">
+        Package versions that failed behavioral analysis
+      </p>
     </div>
-    <button onclick={openAddDialog} class="add-button">
-      <Plus class="icon-sm" />
-      Add Package
-    </button>
   </div>
 
   <div class="filter-bar">
     <select
       bind:value={selectedEcosystem}
-      onchange={loadPackages}
-      class="ecosystem-select"
+      onchange={loadQueue}
+      class="filter-select"
     >
+      <option value="">All Ecosystems</option>
       {#each ecosystems as eco}
         <option value={eco}>{eco.toUpperCase()}</option>
       {/each}
+    </select>
+
+    <select
+      bind:value={selectedStatus}
+      onchange={loadQueue}
+      class="filter-select"
+    >
+      <option value="all">All Statuses</option>
+      <option value="pending">Pending</option>
+      <option value="approved">Approved</option>
+      <option value="rejected">Rejected</option>
     </select>
   </div>
 
@@ -132,106 +100,82 @@
         <span>{error}</span>
       </div>
     </div>
-  {:else if packages.length === 0}
+  {:else if items.length === 0}
     <div class="empty-state">
-      <p class="empty-text">
-        No packages found for {selectedEcosystem}
+      <ShieldAlert class="empty-icon" />
+      <p class="empty-text">No items in the review queue</p>
+      <p class="empty-hint">
+        Packages that fail behavioral analysis will appear here
       </p>
-      <p class="empty-hint">Add a package to start tracking</p>
     </div>
   {:else}
-    <div class="packages-grid">
-      {#each packages as pkg}
-        {@const eco = (pkg.ecosystem as Ecosystem) ?? selectedEcosystem}
-        {@const colorClass = ecosystemColors[eco] ?? ecosystemColors.npm}
-        <a
-          href="/admin/packages/{pkg.ecosystem}/{encodeURIComponent(
-            pkg.identifier,
-          )}"
-          class="package-card"
-        >
-          <div class="card-row">
-            <div class="card-left">
-              <span class="eco-badge {colorClass}">
-                {eco}
-              </span>
-              <span class="package-name">
-                {pkg.identifier}
-              </span>
-            </div>
-            <div class="card-right">
-              {#if pkg.latest_version}
-                <span class="version-text">
-                  v{pkg.latest_version}
-                </span>
-              {/if}
-              <span class="view-link"> View → </span>
-            </div>
-          </div>
-        </a>
-      {/each}
+    <div class="table-wrapper">
+      <table class="queue-table">
+        <thead>
+          <tr>
+            <th>Package</th>
+            <th>Version</th>
+            <th>Status</th>
+            <th>Comment</th>
+          </tr>
+        </thead>
+        <tbody>
+          {#each items as item}
+            {@const status = reviewStatus(item)}
+            {@const eco = (item.ecosystem as Ecosystem) ?? "npm"}
+            {@const colorClass = ecosystemColors[eco] ?? ecosystemColors.npm}
+            <tr>
+              <td>
+                <a
+                  href="/admin/packages/{item.ecosystem}/{encodeURIComponent(
+                    item.identifier,
+                  )}/behavior?version={encodeURIComponent(item.version)}"
+                  class="package-link"
+                >
+                  <span class="eco-badge {colorClass}">
+                    {item.ecosystem}
+                  </span>
+                  <span class="package-name">{item.identifier}</span>
+                </a>
+              </td>
+              <td class="cell-version">
+                <span class="version-text">{item.version}</span>
+                {#if item.is_latest}
+                  <span class="badge-latest">latest</span>
+                {/if}
+              </td>
+              <td>
+                {#if status === "approved"}
+                  <span class="status-badge status-approved">
+                    <CheckCircle2 class="status-icon" />
+                    Approved
+                  </span>
+                {:else if status === "rejected"}
+                  <span class="status-badge status-rejected">
+                    <XCircle class="status-icon" />
+                    Rejected
+                  </span>
+                {:else}
+                  <span class="status-badge status-pending">
+                    <Clock class="status-icon" />
+                    Pending
+                  </span>
+                {/if}
+              </td>
+              <td class="cell-comment">
+                {#if item.review_comment}
+                  <span class="comment-text">{item.review_comment}</span>
+                {:else}
+                  <span class="comment-empty">--</span>
+                {/if}
+              </td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
     </div>
   {/if}
 </div>
-
-<!-- Add Package Dialog -->
-{#if addDialogOpen}
-  <!-- svelte-ignore a11y_click_events_have_key_events -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="dialog-overlay" onclick={() => (addDialogOpen = false)}>
-    <div class="dialog-panel" onclick={(e) => e.stopPropagation()}>
-      <div class="dialog-header">
-        <h2 class="dialog-title">Add Package</h2>
-        <p class="dialog-subtitle">
-          Add a {selectedEcosystem} package to track
-        </p>
-      </div>
-
-      <div class="dialog-body">
-        <div class="form-field">
-          <label class="form-label" for="packageName"> Package Name </label>
-          <input
-            id="packageName"
-            type="text"
-            bind:value={newPackageName}
-            placeholder="e.g., express"
-            onkeydown={(e: KeyboardEvent) =>
-              e.key === "Enter" && handleAddPackage()}
-            class="form-input"
-          />
-        </div>
-
-        {#if addError}
-          <div class="alert alert-error">
-            {addError}
-          </div>
-        {/if}
-
-        {#if addSuccess}
-          <div class="alert alert-success">
-            {addSuccess}
-          </div>
-        {/if}
-      </div>
-
-      <div class="dialog-footer">
-        <button onclick={() => (addDialogOpen = false)} class="btn-secondary">
-          Cancel
-        </button>
-        <button
-          onclick={handleAddPackage}
-          disabled={addLoading}
-          class="btn-primary"
-        >
-          {#if addLoading}
-            <Loader2 class="icon-spin" />
-          {/if}
-          Add Package
-        </button>
-      </div>
-    </div>
-  </div>
-{/if}
 
 <style>
   .page {
@@ -239,9 +183,6 @@
   }
 
   .page-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
     margin-bottom: 1.5rem;
   }
 
@@ -255,38 +196,14 @@
     color: var(--text-secondary);
   }
 
-  .add-button {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 1rem;
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: #fff;
-    background: var(--accent);
-    border: none;
-    border-radius: 6px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-    cursor: pointer;
-    transition: background 0.15s;
-  }
-
-  .add-button:hover {
-    background: var(--accent-hover);
-  }
-
-  .add-button :global(.icon-sm) {
-    width: 1rem;
-    height: 1rem;
-  }
-
   .filter-bar {
+    display: flex;
+    gap: 0.75rem;
     margin-bottom: 1.5rem;
   }
 
-  .ecosystem-select {
+  .filter-select {
     height: 2.5rem;
-    width: 12rem;
     padding: 0 0.75rem;
     font-size: 0.875rem;
     border-radius: 6px;
@@ -345,63 +262,90 @@
     border: 2px dashed var(--border);
     padding: 3rem;
     text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .empty-state :global(.empty-icon) {
+    width: 2.5rem;
+    height: 2.5rem;
+    color: var(--text-secondary);
+    opacity: 0.5;
   }
 
   .empty-text {
     color: var(--text-secondary);
+    font-weight: 500;
   }
 
   .empty-hint {
-    margin-top: 0.25rem;
     font-size: 0.875rem;
     color: var(--text-secondary);
     opacity: 0.7;
   }
 
-  .packages-grid {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-  }
-
-  .package-card {
-    display: block;
-    text-decoration: none;
-    border-radius: 12px;
+  .table-wrapper {
+    border-radius: 8px;
     border: 1px solid var(--card-border);
     background: var(--card-bg);
-    padding: 1rem;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-    transition:
-      transform 0.15s,
-      border-color 0.15s,
-      box-shadow 0.15s;
+    overflow: auto;
   }
 
-  .package-card:hover {
-    transform: translateY(-2px);
-    border-color: rgba(29, 78, 216, 0.35);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  .queue-table {
+    width: 100%;
+    border-collapse: collapse;
   }
 
-  .card-row {
-    display: flex;
+  .queue-table thead tr {
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-secondary);
+  }
+
+  .queue-table th {
+    padding: 0.75rem 1rem;
+    text-align: left;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+
+  .queue-table tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background 0.1s;
+  }
+
+  .queue-table tbody tr:last-child {
+    border-bottom: none;
+  }
+
+  .queue-table tbody tr:hover {
+    background: var(--bg-secondary);
+  }
+
+  .queue-table td {
+    padding: 0.75rem 1rem;
+  }
+
+  .package-link {
+    display: inline-flex;
     align-items: center;
-    justify-content: space-between;
+    gap: 0.5rem;
+    text-decoration: none;
+    transition: color 0.15s;
   }
 
-  .card-left {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    min-width: 0;
+  .package-link:hover .package-name {
+    color: var(--accent);
   }
 
   .eco-badge {
     display: inline-block;
     flex-shrink: 0;
-    padding: 0.125rem 0.625rem;
-    font-size: 0.7rem;
+    padding: 0.125rem 0.5rem;
+    font-size: 0.65rem;
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.025em;
@@ -434,188 +378,80 @@
   }
 
   .package-name {
-    font-size: 1rem;
     font-weight: 600;
     color: var(--text-primary);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    transition: color 0.15s;
   }
 
-  .package-card:hover .package-name {
-    color: var(--accent);
-  }
-
-  .card-right {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    flex-shrink: 0;
+  .cell-version {
+    font-family:
+      ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   }
 
   .version-text {
-    font-size: 0.875rem;
-    color: var(--text-secondary);
-  }
-
-  .view-link {
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: var(--text-secondary);
-    opacity: 0.6;
-    transition: opacity 0.15s;
-  }
-
-  .package-card:hover .view-link {
-    opacity: 1;
     color: var(--text-primary);
   }
 
-  /* Dialog */
-  .dialog-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 50;
-    background: rgba(0, 0, 0, 0.5);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .dialog-panel {
-    width: 100%;
-    max-width: 28rem;
-    border-radius: 8px;
-    border: 1px solid var(--card-border);
-    background: var(--card-bg);
-    padding: 1.5rem;
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-  }
-
-  .dialog-header {
-    margin-bottom: 1rem;
-  }
-
-  .dialog-title {
-    font-size: 1.125rem;
+  .badge-latest {
+    display: inline-block;
+    margin-left: 0.5rem;
+    padding: 0.125rem 0.5rem;
+    font-size: 0.7rem;
     font-weight: 600;
-    color: var(--text-primary);
+    font-family:
+      system-ui,
+      -apple-system,
+      sans-serif;
+    border-radius: 999px;
+    background: rgba(22, 163, 74, 0.15);
+    color: #15803d;
   }
 
-  .dialog-subtitle {
-    font-size: 0.875rem;
-    color: var(--text-secondary);
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.625rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    border-radius: 999px;
   }
 
-  .dialog-body {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
+  .status-badge :global(.status-icon) {
+    width: 0.875rem;
+    height: 0.875rem;
   }
 
-  .form-field {
-    display: flex;
-    flex-direction: column;
+  .status-approved {
+    background: rgba(22, 163, 74, 0.12);
+    color: #15803d;
   }
 
-  .form-label {
-    margin-bottom: 0.5rem;
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: var(--text-primary);
-  }
-
-  .form-input {
-    height: 2.5rem;
-    width: 100%;
-    padding: 0 0.75rem;
-    font-size: 0.875rem;
-    border-radius: 6px;
-    border: 1px solid var(--border);
-    background: var(--bg-secondary);
-    color: var(--text-primary);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-    outline: none;
-    transition: border-color 0.15s;
-  }
-
-  .form-input::placeholder {
-    color: var(--text-secondary);
-  }
-
-  .form-input:focus {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 2px rgba(29, 78, 216, 0.15);
-  }
-
-  .alert {
-    padding: 0.75rem;
-    border-radius: 6px;
-    font-size: 0.875rem;
-  }
-
-  .alert-error {
-    background: rgba(220, 38, 38, 0.08);
+  .status-rejected {
+    background: rgba(220, 38, 38, 0.12);
     color: #dc2626;
   }
 
-  .alert-success {
-    background: rgba(22, 163, 74, 0.08);
-    color: #16a34a;
+  .status-pending {
+    background: rgba(234, 179, 8, 0.12);
+    color: #a16207;
   }
 
-  .dialog-footer {
-    display: flex;
-    justify-content: flex-end;
-    gap: 0.5rem;
-    margin-top: 1.5rem;
+  .cell-comment {
+    max-width: 20rem;
   }
 
-  .btn-secondary {
-    padding: 0.5rem 1rem;
+  .comment-text {
     font-size: 0.875rem;
-    font-weight: 500;
-    color: var(--text-primary);
-    background: var(--bg-secondary);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-    cursor: pointer;
-    transition: background 0.15s;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: block;
   }
 
-  .btn-secondary:hover {
-    background: var(--bg-primary);
-  }
-
-  .btn-primary {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.5rem 1rem;
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: #fff;
-    background: var(--accent);
-    border: none;
-    border-radius: 6px;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-    cursor: pointer;
-    transition: background 0.15s;
-  }
-
-  .btn-primary:hover {
-    background: var(--accent-hover);
-  }
-
-  .btn-primary:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .btn-primary :global(.icon-spin) {
-    width: 1rem;
-    height: 1rem;
-    margin-right: 0.5rem;
-    animation: spin 1s linear infinite;
+  .comment-empty {
+    color: var(--text-secondary);
+    opacity: 0.4;
   }
 </style>

@@ -44,6 +44,8 @@ type Querier interface {
 	// Tag queries
 	// Looks up a tag type ID by its label.
 	GetTagTypeByLabel(ctx context.Context, label string) (int32, error)
+	// Gets the manual review status and comment for a specific package version.
+	GetVersionReviewStatus(ctx context.Context, arg GetVersionReviewStatusParams) (GetVersionReviewStatusRow, error)
 	// Checks whether an active (pending or running) collection task exists
 	// for the given package version and source. Returns true/false.
 	HasActiveCollectionTask(ctx context.Context, arg HasActiveCollectionTaskParams) (bool, error)
@@ -73,6 +75,10 @@ type Querier interface {
 	// Ordered by most recently created first, paginated.
 	ListCollectionTasks(ctx context.Context, arg ListCollectionTasksParams) ([]ListCollectionTasksRow, error)
 	ListPackageVersions(ctx context.Context, packageID int32) ([]string, error)
+	// Lists package versions that failed behavioral analysis, with their review status.
+	// Used by the admin review queue. Optionally filtered by ecosystem.
+	// Sorted: unreviewed first (NULL manually_approved), then by identifier.
+	ListPackageVersionsForReview(ctx context.Context, ecosystem NullEcosystem) ([]ListPackageVersionsForReviewRow, error)
 	// Lists all versions for a package by ecosystem+identifier, with their verification tags.
 	ListPackageVersionsPublic(ctx context.Context, arg ListPackageVersionsPublicParams) ([]ListPackageVersionsPublicRow, error)
 	// Poller queries

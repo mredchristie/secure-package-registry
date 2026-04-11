@@ -78,6 +78,35 @@ type TaskListResponse struct {
 	Items []TaskListItem `json:"items"`
 }
 
+// --- Admin: review types ---
+
+// ReviewQueueItem is a single item returned by ListReviewQueue.
+type ReviewQueueItem struct {
+	Identifier       string  `json:"identifier"`
+	Ecosystem        string  `json:"ecosystem"`
+	Version          string  `json:"version"`
+	IsLatest         bool    `json:"is_latest"`
+	ManuallyApproved *bool   `json:"manually_approved"`
+	ReviewComment    *string `json:"review_comment"`
+}
+
+// ReviewQueueResponse is the response body for ListReviewQueue.
+type ReviewQueueResponse struct {
+	Items []ReviewQueueItem `json:"items"`
+}
+
+// SubmitReviewRequest is the request body for SubmitReview.
+type SubmitReviewRequest struct {
+	Approved bool   `json:"approved"`
+	Comment  string `json:"comment"`
+}
+
+// ReviewStatusResponse is the response body for GetReviewStatus.
+type ReviewStatusResponse struct {
+	ManuallyApproved *bool   `json:"manually_approved"`
+	ReviewComment    *string `json:"review_comment"`
+}
+
 // --- Project: requests ---
 
 // UploadProjectRequest is the request body for uploading/updating a project.

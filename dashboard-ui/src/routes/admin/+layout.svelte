@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import favicon from "$lib/assets/favicon.svg";
-  import { Package, ListTodo, Shield } from "lucide-svelte";
+  import { ClipboardCheck, ListTodo, Package, Shield } from "lucide-svelte";
   import { page } from "$app/stores";
   import "../../app.css";
 
@@ -12,7 +12,8 @@
   const { children }: Props = $props();
 
   const navItems = [
-    { href: "/admin", label: "Packages", icon: Package },
+    { href: "/admin", label: "Review", icon: ClipboardCheck },
+    { href: "/admin/packages", label: "Packages", icon: Package },
     { href: "/admin/tasks", label: "Tasks", icon: ListTodo },
   ];
 

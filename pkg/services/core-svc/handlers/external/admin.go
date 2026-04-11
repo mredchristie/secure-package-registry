@@ -43,12 +43,15 @@ func NewAdminHandler(db coredb.Querier, publisher message.Publisher, minio *sprm
 	}
 
 	r := chi.NewRouter()
+	r.Get("/review", h.ListReviewQueue)
 	r.Get("/packages", h.ListPackages)
 	r.Post("/packages", h.AddPackage)
 	r.Get("/packages/{ecosystem}/{identifier}/versions", h.ListVersions)
 	r.Post("/packages/{ecosystem}/{identifier}/scan", h.TriggerScan)
 	r.Get("/packages/{ecosystem}/{identifier}/behavior", h.GetBehavior)
 	r.Get("/packages/{ecosystem}/{identifier}/behavior/raw", h.GetBehaviorRaw)
+	r.Get("/packages/{ecosystem}/{identifier}/versions/{version}/review", h.GetReviewStatus)
+	r.Post("/packages/{ecosystem}/{identifier}/versions/{version}/review", h.SubmitReview)
 	r.Get("/tasks", h.ListTasks)
 	r.Get("/tasks/{taskID}/artifact", h.DownloadArtifact)
 
@@ -578,6 +581,202 @@ func (h *AdminHandler) DownloadArtifact(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
+// ListReviewQueue returns package versions that failed behavioral analysis,
+// along with their manual review status.
+func (h *AdminHandler) ListReviewQueue(w http.ResponseWriter, r *http.Request) {
+	var ecosystem coredb.NullEcosystem
+	if ecoStr := r.URL.Query().Get("ecosystem"); ecoStr != "" {
+		eco := coredb.Ecosystem(ecoStr)
+		if !validEcosystem(eco) {
+			render.Status(r, http.StatusBadRequest)
+			render.JSON(w, r, map[string]string{"error": "invalid ecosystem: " + ecoStr})
+			return
+		}
+		ecosystem = coredb.NullEcosystem{Ecosystem: eco, Valid: true}
+	}
+
+	rows, err := h.db.ListPackageVersionsForReview(r.Context(), ecosystem)
+	if err != nil {
+		h.log.Error().Err(err).Msg("Failed to list review queue")
+		render.Status(r, http.StatusInternalServerError)
+		render.JSON(w, r, map[string]string{"error": "failed to list review queue"})
+		return
+	}
+
+	statusFilter := r.URL.Query().Get("status")
+
+	items := make([]ReviewQueueItem, 0, len(rows))
+	for _, row := range rows {
+		item := ReviewQueueItem{
+			Identifier:       row.Identifier,
+			Ecosystem:        row.PEcosystem,
+			Version:          row.Version,
+			IsLatest:         row.IsLatest,
+			ManuallyApproved: boolPtrFromJSONB(row.ManuallyApproved),
+			ReviewComment:    stringPtrFromJSONB(row.ReviewComment),
+		}
+
+		// Apply status filter in Go.
+		switch statusFilter {
+		case "unreviewed":
+			if item.ManuallyApproved != nil {
+				continue
+			}
+		case "approved":
+			if item.ManuallyApproved == nil || !*item.ManuallyApproved {
+				continue
+			}
+		case "rejected":
+			if item.ManuallyApproved == nil || *item.ManuallyApproved {
+				continue
+			}
+		}
+
+		items = append(items, item)
+	}
+
+	render.JSON(w, r, ReviewQueueResponse{Items: items})
+}
+
+// GetReviewStatus returns the current manual review status for a package version.
+func (h *AdminHandler) GetReviewStatus(w http.ResponseWriter, r *http.Request) {
+	ecoStr := chi.URLParam(r, "ecosystem")
+	identifier, _ := url.PathUnescape(chi.URLParam(r, "identifier"))
+	version := chi.URLParam(r, "version")
+
+	ecosystem := coredb.Ecosystem(ecoStr)
+	if !validEcosystem(ecosystem) {
+		render.Status(r, http.StatusBadRequest)
+		render.JSON(w, r, map[string]string{"error": "invalid ecosystem: " + ecoStr})
+		return
+	}
+
+	row, err := h.db.GetVersionReviewStatus(r.Context(), coredb.GetVersionReviewStatusParams{
+		Ecosystem:  ecosystem,
+		Identifier: identifier,
+		Version:    version,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		render.Status(r, http.StatusNotFound)
+		render.JSON(w, r, map[string]string{"error": "package version not found"})
+		return
+	}
+	if err != nil {
+		h.log.Error().Err(err).Str("identifier", identifier).Str("version", version).Msg("Failed to get review status")
+		render.Status(r, http.StatusInternalServerError)
+		render.JSON(w, r, map[string]string{"error": "failed to get review status"})
+		return
+	}
+
+	render.JSON(w, r, ReviewStatusResponse{
+		ManuallyApproved: boolPtrFromJSONB(row.ManuallyApproved),
+		ReviewComment:    stringPtrFromJSONB(row.ReviewComment),
+	})
+}
+
+// SubmitReview sets the manual_review and review_comment tags on a package version.
+func (h *AdminHandler) SubmitReview(w http.ResponseWriter, r *http.Request) {
+	ecoStr := chi.URLParam(r, "ecosystem")
+	identifier, _ := url.PathUnescape(chi.URLParam(r, "identifier"))
+	version := chi.URLParam(r, "version")
+
+	ecosystem := coredb.Ecosystem(ecoStr)
+	if !validEcosystem(ecosystem) {
+		render.Status(r, http.StatusBadRequest)
+		render.JSON(w, r, map[string]string{"error": "invalid ecosystem: " + ecoStr})
+		return
+	}
+
+	var req SubmitReviewRequest
+	if err := render.DecodeJSON(r.Body, &req); err != nil {
+		render.Status(r, http.StatusBadRequest)
+		render.JSON(w, r, map[string]string{"error": "invalid request body"})
+		return
+	}
+	if req.Comment == "" {
+		render.Status(r, http.StatusBadRequest)
+		render.JSON(w, r, map[string]string{"error": "comment is required"})
+		return
+	}
+
+	ctx := r.Context()
+
+	// Look up the package version ID.
+	pvID, err := h.db.GetPackageVersionID(ctx, coredb.GetPackageVersionIDParams{
+		Ecosystem:  ecosystem,
+		Identifier: identifier,
+		Version:    version,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		render.Status(r, http.StatusNotFound)
+		render.JSON(w, r, map[string]string{"error": "package version not found"})
+		return
+	}
+	if err != nil {
+		h.log.Error().Err(err).Str("identifier", identifier).Str("version", version).Msg("Failed to look up package version")
+		render.Status(r, http.StatusInternalServerError)
+		render.JSON(w, r, map[string]string{"error": "failed to look up package version"})
+		return
+	}
+
+	// Upsert the manually_approved tag.
+	approvedTagType, err := h.db.GetTagTypeByLabel(ctx, "manually_approved")
+	if err != nil {
+		h.log.Error().Err(err).Msg("Failed to look up manually_approved tag type")
+		render.Status(r, http.StatusInternalServerError)
+		render.JSON(w, r, map[string]string{"error": "failed to look up tag type"})
+		return
+	}
+	approvedValue := []byte("false")
+	if req.Approved {
+		approvedValue = []byte("true")
+	}
+	if err := h.db.InsertPackageTag(ctx, coredb.InsertPackageTagParams{
+		PackageVersion: pvID,
+		TagType:        approvedTagType,
+		Value:          approvedValue,
+	}); err != nil {
+		h.log.Error().Err(err).Msg("Failed to set manually_approved tag")
+		render.Status(r, http.StatusInternalServerError)
+		render.JSON(w, r, map[string]string{"error": "failed to save review"})
+		return
+	}
+
+	// Upsert the review_comment tag.
+	commentTagType, err := h.db.GetTagTypeByLabel(ctx, "review_comment")
+	if err != nil {
+		h.log.Error().Err(err).Msg("Failed to look up review_comment tag type")
+		render.Status(r, http.StatusInternalServerError)
+		render.JSON(w, r, map[string]string{"error": "failed to look up tag type"})
+		return
+	}
+	// Store the comment as a JSON string value.
+	commentValue := []byte(fmt.Sprintf("%q", req.Comment))
+	if err := h.db.InsertPackageTag(ctx, coredb.InsertPackageTagParams{
+		PackageVersion: pvID,
+		TagType:        commentTagType,
+		Value:          commentValue,
+	}); err != nil {
+		h.log.Error().Err(err).Msg("Failed to set review_comment tag")
+		render.Status(r, http.StatusInternalServerError)
+		render.JSON(w, r, map[string]string{"error": "failed to save review comment"})
+		return
+	}
+
+	h.log.Info().
+		Str("package", identifier).
+		Str("version", version).
+		Bool("approved", req.Approved).
+		Msg("Manual review submitted")
+
+	approved := req.Approved
+	comment := req.Comment
+	render.JSON(w, r, ReviewStatusResponse{
+		ManuallyApproved: &approved,
+		ReviewComment:    &comment,
+	})
+}
+
 func (h *AdminHandler) publishPackageRequested(identifier, ecosystem string) error {
 	req := messages.PackageRequest{
 		Ecosystem:  ecosystem,
@@ -599,4 +798,27 @@ func validEcosystem(eco coredb.Ecosystem) bool {
 	default:
 		return false
 	}
+}
+
+// boolPtrFromJSONB converts a JSONB []byte (e.g. "true", "false", or nil) to *bool.
+func boolPtrFromJSONB(data []byte) *bool {
+	if data == nil {
+		return nil
+	}
+	val := string(data) == "true"
+	return &val
+}
+
+// stringPtrFromJSONB converts a JSONB []byte (e.g. `"some text"` or nil) to *string.
+// It strips the outer JSON quotes from the stored string value.
+func stringPtrFromJSONB(data []byte) *string {
+	if data == nil {
+		return nil
+	}
+	s := string(data)
+	// JSONB text values are stored as quoted JSON strings.
+	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
+		s = s[1 : len(s)-1]
+	}
+	return &s
 }

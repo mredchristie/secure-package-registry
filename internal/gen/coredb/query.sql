@@ -413,6 +413,52 @@ JOIN package_versions pv ON pv.id = pd.package_version_id
 WHERE pd.package_id = $1
 ORDER BY up.user_id, up.name;
 
+-- name: ListPackageVersionsForReview :many
+-- Lists package versions that failed behavioral analysis, with their review status.
+-- Used by the admin review queue. Optionally filtered by ecosystem.
+-- Sorted: unreviewed first (NULL manually_approved), then by identifier.
+SELECT
+    p.identifier,
+    p.ecosystem::text,
+    pv.version,
+    (pv.version = p.latest_version) AS is_latest,
+    (SELECT pvt.value
+     FROM package_version_tags pvt
+     JOIN package_tag_types ptt ON ptt.id = pvt.tag_type
+     WHERE pvt.package_version = pv.id AND ptt.label = 'manually_approved') AS manually_approved,
+    (SELECT pvt.value
+     FROM package_version_tags pvt
+     JOIN package_tag_types ptt ON ptt.id = pvt.tag_type
+     WHERE pvt.package_version = pv.id AND ptt.label = 'review_comment') AS review_comment
+FROM package_versions pv
+JOIN packages p ON p.id = pv.package_id
+JOIN package_version_tags beh ON beh.package_version = pv.id
+    AND beh.tag_type = (SELECT id FROM package_tag_types WHERE label = 'behavior_passed')
+    AND beh.value = 'false'::jsonb
+WHERE (sqlc.narg(ecosystem)::ECOSYSTEM IS NULL OR p.ecosystem = sqlc.narg(ecosystem)::ECOSYSTEM)
+ORDER BY
+    (SELECT pvt.value FROM package_version_tags pvt
+     JOIN package_tag_types ptt ON ptt.id = pvt.tag_type
+     WHERE pvt.package_version = pv.id AND ptt.label = 'manually_approved') IS NULL DESC,
+    p.identifier, pv.version;
+
+-- name: GetVersionReviewStatus :one
+-- Gets the manual review status and comment for a specific package version.
+SELECT
+    (SELECT pvt.value
+     FROM package_version_tags pvt
+     JOIN package_tag_types ptt ON ptt.id = pvt.tag_type
+     WHERE pvt.package_version = pv.id AND ptt.label = 'manually_approved') AS manually_approved,
+    (SELECT pvt.value
+     FROM package_version_tags pvt
+     JOIN package_tag_types ptt ON ptt.id = pvt.tag_type
+     WHERE pvt.package_version = pv.id AND ptt.label = 'review_comment') AS review_comment
+FROM package_versions pv
+JOIN packages p ON p.id = pv.package_id
+WHERE p.ecosystem = $1
+  AND p.identifier = $2
+  AND pv.version = $3;
+
 -- name: ListPackageVersionsPublic :many
 -- Lists all versions for a package by ecosystem+identifier, with their verification tags.
 SELECT

@@ -148,6 +148,7 @@ const (
 	PkgVtypeInteger PkgVtype = "integer"
 	PkgVtypeBoolean PkgVtype = "boolean"
 	PkgVtypeFloat   PkgVtype = "float"
+	PkgVtypeText    PkgVtype = "text"
 )
 
 func (e *PkgVtype) Scan(src interface{}) error {

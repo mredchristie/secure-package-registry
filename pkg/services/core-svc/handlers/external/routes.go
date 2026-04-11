@@ -66,6 +66,20 @@ func Routes() []apidef.RouteDef {
 		// --- Admin routes ---
 		{
 			Method:       "GET",
+			Path:         "/api/v1/admin/review",
+			Summary:      "List review queue",
+			Description:  "List package versions that failed behavioral analysis, with their manual review status.",
+			Tag:          "Admin",
+			OperationID:  "adminListReviewQueue",
+			ResponseType: reflect.TypeOf(ReviewQueueResponse{}),
+			SuccessCode:  200,
+			QueryParams: []apidef.QueryParam{
+				{Name: "ecosystem", Description: "Filter by ecosystem"},
+				{Name: "status", Description: "Filter by review status: unreviewed, approved, rejected, or all (default)"},
+			},
+		},
+		{
+			Method:       "GET",
 			Path:         "/api/v1/admin/packages",
 			Summary:      "List watched packages",
 			Description:  "List all watched packages for a given ecosystem.",
@@ -140,6 +154,29 @@ func Routes() []apidef.RouteDef {
 			QueryParams: []apidef.QueryParam{
 				{Name: "version", Description: "Package version to retrieve behavior for", Required: true},
 			},
+		},
+		{
+			Method:       "GET",
+			Path:         "/api/v1/admin/packages/{ecosystem}/{identifier}/versions/{version}/review",
+			Summary:      "Get review status",
+			Description:  "Get the current manual review status and comment for a specific package version.",
+			Tag:          "Admin",
+			OperationID:  "adminGetReviewStatus",
+			ResponseType: reflect.TypeOf(ReviewStatusResponse{}),
+			SuccessCode:  200,
+			PathParams:   []string{"ecosystem", "identifier", "version"},
+		},
+		{
+			Method:       "POST",
+			Path:         "/api/v1/admin/packages/{ecosystem}/{identifier}/versions/{version}/review",
+			Summary:      "Submit review",
+			Description:  "Submit a manual review (approve/reject with comment) for a package version.",
+			Tag:          "Admin",
+			OperationID:  "adminSubmitReview",
+			RequestBody:  reflect.TypeOf(SubmitReviewRequest{}),
+			ResponseType: reflect.TypeOf(ReviewStatusResponse{}),
+			SuccessCode:  200,
+			PathParams:   []string{"ecosystem", "identifier", "version"},
 		},
 		{
 			Method:       "GET",
