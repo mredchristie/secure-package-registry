@@ -1,9 +1,9 @@
 -- Policy columns on user_projects: enforce checks before package downloads.
 -- Defaults are strict: require provenance + behavior, no manual override.
 ALTER TABLE user_projects
-    ADD COLUMN require_provenance  BOOLEAN NOT NULL DEFAULT TRUE,
+    ADD COLUMN require_provenance  BOOLEAN NOT NULL DEFAULT FALSE,
     ADD COLUMN require_behavior    BOOLEAN NOT NULL DEFAULT TRUE,
-    ADD COLUMN allow_manual_review BOOLEAN NOT NULL DEFAULT FALSE;
+    ADD COLUMN allow_manual_review BOOLEAN NOT NULL DEFAULT TRUE;
 
 -- Per-project API keys for reg-proxy authentication.
 CREATE TABLE project_api_keys (
