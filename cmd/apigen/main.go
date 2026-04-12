@@ -330,7 +330,7 @@ func generateSchemas(schemas openapi3.Schemas, enumTypes map[string][]string, in
 // getTypeName extracts a clean type name from reflect.Type
 func getTypeName(t reflect.Type) string {
 	// Handle pointers
-	if t.Kind() == reflect.Ptr {
+	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 

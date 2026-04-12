@@ -35,7 +35,7 @@ type buildConfig struct {
 	// For "custom" a Containerfile must exist alongside build.yaml.
 	Template string `yaml:"template"`
 	// All other keys are passed verbatim as template variables.
-	Vars map[string]interface{} `yaml:",inline"`
+	Vars map[string]any `yaml:",inline"`
 }
 
 // registerRequest mirrors the internal API payload.
@@ -192,7 +192,7 @@ func loadBuildConfig(path string) (*buildConfig, error) {
 	}
 
 	// First pass: get the template name.
-	var raw map[string]interface{}
+	var raw map[string]any
 	if err := yaml.Unmarshal(data, &raw); err != nil {
 		return nil, fmt.Errorf("parse YAML: %w", err)
 	}
@@ -232,7 +232,7 @@ func renderContainerfile(configDir, buildDir string, cfg *buildConfig) (string, 
 
 	// Use a custom "default" func so templates can write {{ index . "key" | default "fallback" }}.
 	funcMap := template.FuncMap{
-		"default": func(def, val interface{}) interface{} {
+		"default": func(def, val any) any {
 			if val == nil {
 				return def
 			}
@@ -318,7 +318,7 @@ func registerBuild(ctx context.Context, apiURL, ecosystem, identifier, version, 
 	}()
 
 	if resp.StatusCode != http.StatusCreated {
-		var errBody map[string]interface{}
+		var errBody map[string]any
 		if decErr := json.NewDecoder(resp.Body).Decode(&errBody); decErr == nil {
 			return fmt.Errorf("API returned %d: %v", resp.StatusCode, errBody)
 		}

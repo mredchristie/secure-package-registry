@@ -17,8 +17,8 @@ func Routes() []apidef.RouteDef {
 			Description:  "Register a package from an internal service. Returns existing package if already created.",
 			Tag:          "Internal",
 			OperationID:  "internalCreatePackage",
-			RequestBody:  reflect.TypeOf(CreatePackageRequest{}),
-			ResponseType: reflect.TypeOf(CreatePackageResponse{}),
+			RequestBody:  reflect.TypeFor[CreatePackageRequest](),
+			ResponseType: reflect.TypeFor[CreatePackageResponse](),
 			SuccessCode:  201,
 		},
 		{
@@ -28,8 +28,8 @@ func Routes() []apidef.RouteDef {
 			Description:  "Validate that a package version exists, tag it as reproducible, and upload the artifact to the registry.",
 			Tag:          "Internal",
 			OperationID:  "internalRegisterReproducibleBuild",
-			RequestBody:  reflect.TypeOf(RegisterReproducibleBuildRequest{}),
-			ResponseType: reflect.TypeOf(RegisterReproducibleBuildResponse{}),
+			RequestBody:  reflect.TypeFor[RegisterReproducibleBuildRequest](),
+			ResponseType: reflect.TypeFor[RegisterReproducibleBuildResponse](),
 			SuccessCode:  201,
 		},
 	}

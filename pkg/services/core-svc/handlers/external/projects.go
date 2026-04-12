@@ -408,7 +408,7 @@ func (h *ProjectHandler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 
 // boolPtrFromInterface converts a database interface{} (bool or nil) to *bool.
 // It handles the nullable boolean fields from sqlc queries.
-func boolPtrFromInterface(v interface{}) *bool {
+func boolPtrFromInterface(v any) *bool {
 	if v == nil {
 		return nil
 	}

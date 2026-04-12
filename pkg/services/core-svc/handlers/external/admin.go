@@ -751,7 +751,7 @@ func (h *AdminHandler) SubmitReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Store the comment as a JSON string value.
-	commentValue := []byte(fmt.Sprintf("%q", req.Comment))
+	commentValue := fmt.Appendf(nil, "%q", req.Comment)
 	if err := h.db.InsertPackageTag(ctx, coredb.InsertPackageTagParams{
 		PackageVersion: pvID,
 		TagType:        commentTagType,

@@ -59,13 +59,13 @@ func parseTarballPath(path string) (pkgName, version string) {
 	}
 
 	// Find the /-/ separator that precedes the tarball filename.
-	idx := strings.Index(rest, "/-/")
-	if idx < 0 {
+	before, after, ok := strings.Cut(rest, "/-/")
+	if !ok {
 		return "", ""
 	}
 
-	rawPkg := rest[:idx]
-	tarballFile := rest[idx+3:] // after "/-/"
+	rawPkg := before
+	tarballFile := after // after "/-/"
 
 	// Decode percent-encoded scoped names: @scope%2fname -> @scope/name
 	pkgName, err := url.PathUnescape(rawPkg)
@@ -285,7 +285,7 @@ func Start(ctx context.Context, deps *services.Deps) error {
 						Msg("Blocked: package not in project dependency set")
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusForbidden)
-					_ = json.NewEncoder(w).Encode(map[string]interface{}{
+					_ = json.NewEncoder(w).Encode(map[string]any{
 						"error":   "policy violation",
 						"package": pkgName,
 						"version": version,
@@ -311,7 +311,7 @@ func Start(ctx context.Context, deps *services.Deps) error {
 						Msg("Blocked by policy")
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusForbidden)
-					_ = json.NewEncoder(w).Encode(map[string]interface{}{
+					_ = json.NewEncoder(w).Encode(map[string]any{
 						"error":      "policy violation",
 						"package":    pkgName,
 						"version":    version,

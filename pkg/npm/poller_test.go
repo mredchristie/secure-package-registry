@@ -30,7 +30,7 @@ func TestPollerStreamsUpdates(t *testing.T) {
 	require.NoError(t, err)
 
 	var received []string
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		select {
 		case u := <-updates:
 			received = append(received, u.PackageName)

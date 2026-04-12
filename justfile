@@ -8,6 +8,8 @@ fix:
   # Fix markdown formatting with Prettier
   bunx prettier --write "**/*.md" --config ./.prettierrc
 
+  go fix ./...
+
   go tool gofumpt -l -w .
 
   go tool golangci-lint run --fix
