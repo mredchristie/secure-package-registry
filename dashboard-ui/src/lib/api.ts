@@ -82,7 +82,7 @@ async function authenticatedFetchJSON<T>(
 // Admin API — for the /admin dashboard
 export const packagesAPI = {
 	add: (data: AddPackageRequest): Promise<AddPackageResponse> => {
-		return fetchJSON(`${API_BASE}/admin/packages`, {
+		return authenticatedFetchJSON(`${API_BASE}/admin/packages`, {
 			body: JSON.stringify(data),
 			method: "POST",
 		});
@@ -93,7 +93,7 @@ export const packagesAPI = {
 		identifier: string,
 		version: string,
 	): Promise<ProcessTree> => {
-		return fetchJSON(
+		return authenticatedFetchJSON(
 			`${API_BASE}/admin/packages/${encodeURIComponent(ecosystem)}/${encodeURIComponent(identifier)}/behavior?version=${encodeURIComponent(version)}`,
 		);
 	},
@@ -103,7 +103,7 @@ export const packagesAPI = {
 		identifier: string,
 		version: string,
 	): Promise<ProcessTree> => {
-		return fetchJSON(
+		return authenticatedFetchJSON(
 			`${API_BASE}/admin/packages/${encodeURIComponent(ecosystem)}/${encodeURIComponent(identifier)}/behavior/raw?version=${encodeURIComponent(version)}`,
 		);
 	},
@@ -113,13 +113,15 @@ export const packagesAPI = {
 		identifier: string,
 		version: string,
 	): Promise<ReviewStatusResponse> => {
-		return fetchJSON(
+		return authenticatedFetchJSON(
 			`${API_BASE}/admin/packages/${encodeURIComponent(ecosystem)}/${encodeURIComponent(identifier)}/versions/${encodeURIComponent(version)}/review`,
 		);
 	},
 
 	list: (ecosystem: Ecosystem): Promise<ListPackagesResponse> => {
-		return fetchJSON(`${API_BASE}/admin/packages?ecosystem=${ecosystem}`);
+		return authenticatedFetchJSON(
+			`${API_BASE}/admin/packages?ecosystem=${ecosystem}`,
+		);
 	},
 
 	reviewQueue: (params?: {
@@ -133,7 +135,7 @@ export const packagesAPI = {
 		const url = qs
 			? `${API_BASE}/admin/review?${qs}`
 			: `${API_BASE}/admin/review`;
-		return fetchJSON(url);
+		return authenticatedFetchJSON(url);
 	},
 
 	scan: (
@@ -141,7 +143,7 @@ export const packagesAPI = {
 		identifier: string,
 		data: TriggerScanRequest,
 	): Promise<TriggerScanResponse> => {
-		return fetchJSON(
+		return authenticatedFetchJSON(
 			`${API_BASE}/admin/packages/${encodeURIComponent(ecosystem)}/${encodeURIComponent(identifier)}/scan`,
 			{
 				body: JSON.stringify(data),
@@ -156,7 +158,7 @@ export const packagesAPI = {
 		version: string,
 		data: { approved: boolean; comment: string },
 	): Promise<ReviewStatusResponse> => {
-		return fetchJSON(
+		return authenticatedFetchJSON(
 			`${API_BASE}/admin/packages/${encodeURIComponent(ecosystem)}/${encodeURIComponent(identifier)}/versions/${encodeURIComponent(version)}/review`,
 			{
 				body: JSON.stringify(data),
@@ -169,15 +171,21 @@ export const packagesAPI = {
 		ecosystem: string,
 		identifier: string,
 	): Promise<PackageVersion> => {
-		return fetchJSON(
+		return authenticatedFetchJSON(
 			`${API_BASE}/admin/packages/${encodeURIComponent(ecosystem)}/${encodeURIComponent(identifier)}/versions`,
 		);
 	},
 };
 
 export const tasksAPI = {
-	downloadArtifact: (taskId: number): Promise<Response> => {
-		return fetch(`${API_BASE}/admin/tasks/${taskId}/artifact`);
+	downloadArtifact: async (taskId: number): Promise<Response> => {
+		const { data, error } = await authClient.token();
+		if (error || !data?.token) {
+			throw new APIError(401, "Not authenticated");
+		}
+		return fetch(`${API_BASE}/admin/tasks/${taskId}/artifact`, {
+			headers: { Authorization: `Bearer ${data.token}` },
+		});
 	},
 	list: (params?: {
 		ecosystem?: Ecosystem;
@@ -195,7 +203,7 @@ export const tasksAPI = {
 			? `${API_BASE}/admin/tasks?${queryString}`
 			: `${API_BASE}/admin/tasks`;
 
-		return fetchJSON(url);
+		return authenticatedFetchJSON(url);
 	},
 };
 

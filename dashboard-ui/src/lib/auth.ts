@@ -26,20 +26,6 @@ export const auth = betterAuth({
 
 	database: pool,
 
-	emailAndPassword: {
-		enabled: true,
-	},
-
-	plugins: [
-		organization(),
-		apiKey(),
-		admin(),
-		jwt(),
-		sveltekitCookies(getRequestEvent), // make sure this is the last plugin in the array
-	],
-
-	trustedOrigins,
-
 	databaseHooks: {
 		user: {
 			create: {
@@ -59,4 +45,18 @@ export const auth = betterAuth({
 			},
 		},
 	},
+
+	emailAndPassword: {
+		enabled: true,
+	},
+
+	plugins: [
+		organization(),
+		apiKey(),
+		admin(),
+		jwt(),
+		sveltekitCookies(getRequestEvent), // make sure this is the last plugin in the array
+	],
+
+	trustedOrigins,
 });
