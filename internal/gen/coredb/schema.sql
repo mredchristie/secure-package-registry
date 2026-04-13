@@ -188,9 +188,9 @@ CREATE TABLE user_projects (
     status              TEXT NOT NULL DEFAULT 'pending',
     source_file         BYTEA,
     generation          INT NOT NULL DEFAULT 1,
-    require_provenance  BOOLEAN NOT NULL DEFAULT TRUE,
+    require_provenance  BOOLEAN NOT NULL DEFAULT FALSE,
     require_behavior    BOOLEAN NOT NULL DEFAULT TRUE,
-    allow_manual_review BOOLEAN NOT NULL DEFAULT FALSE,
+    allow_manual_review BOOLEAN NOT NULL DEFAULT TRUE,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at          TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (user_id, name)

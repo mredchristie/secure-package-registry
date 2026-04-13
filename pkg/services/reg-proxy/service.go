@@ -300,6 +300,7 @@ func Start(ctx context.Context, deps *services.Deps) error {
 					Str("package", pkgName).
 					Str("version", version).
 					Msg("Failed to check package policy, failing open")
+				return
 			} else {
 				// Evaluate policy.
 				violations := evaluatePolicy(project, depCheck)
