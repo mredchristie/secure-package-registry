@@ -51,7 +51,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 30
-      start_period: 10s
+      start_period: 2s
 
   ## ---------- Remote Gitea ----------
   ## Seeds credentials from .env into the gitea:config Valkey key.

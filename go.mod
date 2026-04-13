@@ -1,6 +1,6 @@
 module git.duti.dev/secure-package-registry
 
-go 1.25.6
+go 1.26
 
 require (
 	charm.land/x/vcr v0.1.1

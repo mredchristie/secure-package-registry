@@ -4,7 +4,7 @@ runner:
   issues:
     max-issues-per-linter: 50
     max-same-issues: 3
-    new-from-rev: HEAD~1
+    # new-from-rev: HEAD~1
 
 output:
   format: colored-line-number
@@ -16,7 +16,7 @@ linters:
 
 linters-settings:
   gofumpt:
-    lang-version: "1.21"
+    lang-version: "1.26"
     extra-rules: true
 
   revive:
@@ -41,10 +41,10 @@ linters-settings:
     enable-all: true
 
   staticcheck:
-    go: "1.21"
+    go: "1.26"
 
   unused:
-    go: "1.21"
+    go: "1.26"
 
   gci:
     local-prefixes: git.duti.dev/acheong08/secure-package-registry
