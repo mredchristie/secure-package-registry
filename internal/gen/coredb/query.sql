@@ -521,9 +521,11 @@ WHERE pak.key_hash = $1
 -- Returns sql.ErrNoRows if the package is not in the dep set (→ block).
 SELECT
     pd.id AS dep_id,
+    pd.dependency_type,
     COALESCE(att.value = 'true'::jsonb, false)::bool AS has_attestation,
     COALESCE(oss.value = 'true'::jsonb, false)::bool AS has_oss_rebuild,
     COALESCE(rep.value = 'true'::jsonb, false)::bool AS has_reproducible,
+    (beh.value IS NOT NULL)::bool AS behavior_analyzed,
     COALESCE(beh.value = 'true'::jsonb, false)::bool AS behavior_passed,
     COALESCE(man.value = 'true'::jsonb, false)::bool AS manually_approved
 FROM project_dependencies pd

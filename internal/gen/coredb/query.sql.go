@@ -14,9 +14,11 @@ import (
 const checkPackagePolicy = `-- name: CheckPackagePolicy :one
 SELECT
     pd.id AS dep_id,
+    pd.dependency_type,
     COALESCE(att.value = 'true'::jsonb, false)::bool AS has_attestation,
     COALESCE(oss.value = 'true'::jsonb, false)::bool AS has_oss_rebuild,
     COALESCE(rep.value = 'true'::jsonb, false)::bool AS has_reproducible,
+    (beh.value IS NOT NULL)::bool AS behavior_analyzed,
     COALESCE(beh.value = 'true'::jsonb, false)::bool AS behavior_passed,
     COALESCE(man.value = 'true'::jsonb, false)::bool AS manually_approved
 FROM project_dependencies pd
@@ -53,9 +55,11 @@ type CheckPackagePolicyParams struct {
 
 type CheckPackagePolicyRow struct {
 	DepID            int32
+	DependencyType   DependencyType
 	HasAttestation   bool
 	HasOssRebuild    bool
 	HasReproducible  bool
+	BehaviorAnalyzed bool
 	BehaviorPassed   bool
 	ManuallyApproved bool
 }
@@ -73,9 +77,11 @@ func (q *Queries) CheckPackagePolicy(ctx context.Context, arg CheckPackagePolicy
 	var i CheckPackagePolicyRow
 	err := row.Scan(
 		&i.DepID,
+		&i.DependencyType,
 		&i.HasAttestation,
 		&i.HasOssRebuild,
 		&i.HasReproducible,
+		&i.BehaviorAnalyzed,
 		&i.BehaviorPassed,
 		&i.ManuallyApproved,
 	)
