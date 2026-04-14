@@ -124,6 +124,7 @@ type VersionSummary struct {
 	Source           Source  `json:"source"`
 	HasAttestation   bool    `json:"has_attestation"`
 	HasOSSRebuild    bool    `json:"has_oss_rebuild"`
+	HasReproducible  bool    `json:"has_reproducible"`
 	BehaviorPassed   *bool   `json:"behavior_passed"`
 	ManuallyApproved *bool   `json:"manually_approved"`
 	ReviewComment    *string `json:"review_comment"`
@@ -189,6 +190,7 @@ func (c *Client) ListVersionsPublic(ctx context.Context, ecosystem Ecosystem, id
 			},
 			HasAttestation:   row.HasAttestation,
 			HasOSSRebuild:    row.HasOssRebuild,
+			HasReproducible:  row.HasReproducible,
 			BehaviorPassed:   boolPtrFromJSONB(row.BehaviorPassed),
 			ManuallyApproved: boolPtrFromJSONB(row.ManuallyApproved),
 			ReviewComment:    stringPtrFromJSONB(row.ReviewComment),

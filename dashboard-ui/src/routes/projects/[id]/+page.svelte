@@ -196,25 +196,34 @@
     }
   }
 
-  // Total applicable checks for a dependency (behavioral analysis only runs on direct deps).
+  // Total applicable checks for a dependency.
+  // Score is 0-3: provenance (grouped), behavioral analysis (direct only), manual review.
+  // Transitive deps don't get behavioral analysis, so max is 2 for them.
   function checksTotalCount(dep: ProjectDependency): number {
     return dep.dependency_type === "direct" ? 3 : 2;
   }
 
-  // Count of passed checks (only counts true, excludes null/pending).
+  // Count of passed checks using grouped provenance (any one = 1 point).
   function checksPassedCount(dep: ProjectDependency): number {
+    const hasProvenance =
+      dep.has_attestation === true ||
+      dep.has_oss_rebuild === true ||
+      dep.has_reproducible === true;
     return (
-      (dep.has_attestation === true ? 1 : 0) +
-      (dep.has_oss_rebuild === true ? 1 : 0) +
+      (hasProvenance ? 1 : 0) +
       (dep.dependency_type === "direct" && dep.behavior_passed === true ? 1 : 0)
     );
   }
 
   // Count of pending checks (null values, scoped to applicable checks).
   function checksPendingCount(dep: ProjectDependency): number {
+    // Provenance is pending if all three sub-checks are null
+    const provenancePending =
+      dep.has_attestation === null &&
+      dep.has_oss_rebuild === null &&
+      dep.has_reproducible === null;
     return (
-      (dep.has_attestation === null ? 1 : 0) +
-      (dep.has_oss_rebuild === null ? 1 : 0) +
+      (provenancePending ? 1 : 0) +
       (dep.dependency_type === "direct" && dep.behavior_passed === null ? 1 : 0)
     );
   }

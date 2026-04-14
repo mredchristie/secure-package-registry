@@ -298,14 +298,15 @@ func (h *ProjectHandler) ListDependencies(w http.ResponseWriter, r *http.Request
 	items := make([]DependencyListItem, 0, len(deps))
 	for _, d := range deps {
 		item := DependencyListItem{
-			ID:             d.ID,
-			Identifier:     d.Identifier,
-			Ecosystem:      d.PEcosystem,
-			Version:        d.Version,
-			DependencyType: string(d.DependencyType),
-			HasAttestation: boolPtrFromInterface(d.HasAttestation),
-			HasOssRebuild:  boolPtrFromInterface(d.HasOssRebuild),
-			BehaviorPassed: boolPtrFromInterface(d.BehaviorPassed),
+			ID:              d.ID,
+			Identifier:      d.Identifier,
+			Ecosystem:       d.PEcosystem,
+			Version:         d.Version,
+			DependencyType:  string(d.DependencyType),
+			HasAttestation:  boolPtrFromInterface(d.HasAttestation),
+			HasOssRebuild:   boolPtrFromInterface(d.HasOssRebuild),
+			HasReproducible: boolPtrFromInterface(d.HasReproducible),
+			BehaviorPassed:  boolPtrFromInterface(d.BehaviorPassed),
 		}
 		if d.VersionConstraint.Valid {
 			item.VersionConstraint = d.VersionConstraint.String
@@ -362,11 +363,12 @@ func (h *ProjectHandler) GetSummary(w http.ResponseWriter, r *http.Request) {
 	items := make([]SummaryRow, 0, len(rows))
 	for _, row := range rows {
 		items = append(items, SummaryRow{
-			DependencyType: string(row.DependencyType),
-			Total:          row.Total,
-			HasAttestation: row.HasAttestation,
-			HasOssRebuild:  row.HasOssRebuild,
-			BehaviorPassed: row.BehaviorPassed,
+			DependencyType:  string(row.DependencyType),
+			Total:           row.Total,
+			HasAttestation:  row.HasAttestation,
+			HasOssRebuild:   row.HasOssRebuild,
+			HasReproducible: row.HasReproducible,
+			BehaviorPassed:  row.BehaviorPassed,
 		})
 	}
 

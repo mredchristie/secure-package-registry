@@ -218,8 +218,8 @@ func evaluatePolicy(project coredb.GetProjectByAPIKeyRow, dep coredb.CheckPackag
 
 	var violations []string
 
-	if project.RequireProvenance && !dep.HasAttestation && !dep.HasOssRebuild {
-		violations = append(violations, "provenance check failed: no attestation or oss rebuild")
+	if project.RequireProvenance && !dep.HasAttestation && !dep.HasOssRebuild && !dep.HasReproducible {
+		violations = append(violations, "provenance check failed: no attestation, oss rebuild, or reproducible build")
 	}
 
 	if project.RequireBehavior && !dep.BehaviorPassed {
@@ -476,6 +476,7 @@ func handleTarball(
 	l.Info().
 		Bool("has_attestation", depCheck.HasAttestation).
 		Bool("has_oss_rebuild", depCheck.HasOssRebuild).
+		Bool("has_reproducible", depCheck.HasReproducible).
 		Bool("behavior_passed", depCheck.BehaviorPassed).
 		Bool("manually_approved", depCheck.ManuallyApproved).
 		Msg("Policy check result")

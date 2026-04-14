@@ -95,6 +95,9 @@ components:
                 has_oss_rebuild:
                     nullable: true
                     type: boolean
+                has_reproducible:
+                    nullable: true
+                    type: boolean
                 id:
                     format: int32
                     type: integer
@@ -365,6 +368,9 @@ components:
                 has_oss_rebuild:
                     format: int32
                     type: integer
+                has_reproducible:
+                    format: int32
+                    type: integer
                 total:
                     format: int32
                     type: integer
@@ -490,6 +496,8 @@ components:
                 has_attestation:
                     type: boolean
                 has_oss_rebuild:
+                    type: boolean
+                has_reproducible:
                     type: boolean
                 latest:
                     type: boolean

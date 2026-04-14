@@ -161,6 +161,7 @@ type DependencyListItem struct {
 	VersionConstraint string `json:"version_constraint,omitempty"`
 	HasAttestation    *bool  `json:"has_attestation"`
 	HasOssRebuild     *bool  `json:"has_oss_rebuild"`
+	HasReproducible   *bool  `json:"has_reproducible"`
 	BehaviorPassed    *bool  `json:"behavior_passed"`
 }
 
@@ -171,11 +172,12 @@ type DependencyListResponse struct {
 
 // SummaryRow is a single row in the project summary.
 type SummaryRow struct {
-	DependencyType string `json:"dependency_type"`
-	Total          int32  `json:"total"`
-	HasAttestation int32  `json:"has_attestation"`
-	HasOssRebuild  int32  `json:"has_oss_rebuild"`
-	BehaviorPassed int32  `json:"behavior_passed"`
+	DependencyType  string `json:"dependency_type"`
+	Total           int32  `json:"total"`
+	HasAttestation  int32  `json:"has_attestation"`
+	HasOssRebuild   int32  `json:"has_oss_rebuild"`
+	HasReproducible int32  `json:"has_reproducible"`
+	BehaviorPassed  int32  `json:"behavior_passed"`
 }
 
 // ProjectSummaryResponse is the response body for GetSummary.

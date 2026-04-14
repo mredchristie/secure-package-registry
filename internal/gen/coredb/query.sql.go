@@ -16,6 +16,7 @@ SELECT
     pd.id AS dep_id,
     COALESCE(att.value = 'true'::jsonb, false)::bool AS has_attestation,
     COALESCE(oss.value = 'true'::jsonb, false)::bool AS has_oss_rebuild,
+    COALESCE(rep.value = 'true'::jsonb, false)::bool AS has_reproducible,
     COALESCE(beh.value = 'true'::jsonb, false)::bool AS behavior_passed,
     COALESCE(man.value = 'true'::jsonb, false)::bool AS manually_approved
 FROM project_dependencies pd
@@ -27,6 +28,9 @@ LEFT JOIN package_version_tags att
 LEFT JOIN package_version_tags oss
     ON oss.package_version = pd.package_version_id
     AND oss.tag_type = (SELECT id FROM package_tag_types WHERE label = 'oss_rebuild')
+LEFT JOIN package_version_tags rep
+    ON rep.package_version = pd.package_version_id
+    AND rep.tag_type = (SELECT id FROM package_tag_types WHERE label = 'reproducible')
 LEFT JOIN package_version_tags beh
     ON beh.package_version = pd.package_version_id
     AND beh.tag_type = (SELECT id FROM package_tag_types WHERE label = 'behavior_passed')
@@ -51,6 +55,7 @@ type CheckPackagePolicyRow struct {
 	DepID            int32
 	HasAttestation   bool
 	HasOssRebuild    bool
+	HasReproducible  bool
 	BehaviorPassed   bool
 	ManuallyApproved bool
 }
@@ -70,6 +75,7 @@ func (q *Queries) CheckPackagePolicy(ctx context.Context, arg CheckPackagePolicy
 		&i.DepID,
 		&i.HasAttestation,
 		&i.HasOssRebuild,
+		&i.HasReproducible,
 		&i.BehaviorPassed,
 		&i.ManuallyApproved,
 	)
@@ -589,6 +595,7 @@ SELECT
     COUNT(*)::int AS total,
     COUNT(*) FILTER (WHERE att.value = 'true'::jsonb)::int AS has_attestation,
     COUNT(*) FILTER (WHERE oss.value = 'true'::jsonb)::int AS has_oss_rebuild,
+    COUNT(*) FILTER (WHERE rep.value = 'true'::jsonb)::int AS has_reproducible,
     COUNT(*) FILTER (WHERE beh.value = 'true'::jsonb)::int AS behavior_passed
 FROM project_dependencies pd
 LEFT JOIN package_version_tags att
@@ -597,6 +604,9 @@ LEFT JOIN package_version_tags att
 LEFT JOIN package_version_tags oss
     ON oss.package_version = pd.package_version_id
     AND oss.tag_type = (SELECT id FROM package_tag_types WHERE label = 'oss_rebuild')
+LEFT JOIN package_version_tags rep
+    ON rep.package_version = pd.package_version_id
+    AND rep.tag_type = (SELECT id FROM package_tag_types WHERE label = 'reproducible')
 LEFT JOIN package_version_tags beh
     ON beh.package_version = pd.package_version_id
     AND beh.tag_type = (SELECT id FROM package_tag_types WHERE label = 'behavior_passed')
@@ -605,11 +615,12 @@ GROUP BY pd.dependency_type
 `
 
 type GetProjectSummaryRow struct {
-	DependencyType DependencyType
-	Total          int32
-	HasAttestation int32
-	HasOssRebuild  int32
-	BehaviorPassed int32
+	DependencyType  DependencyType
+	Total           int32
+	HasAttestation  int32
+	HasOssRebuild   int32
+	HasReproducible int32
+	BehaviorPassed  int32
 }
 
 // Aggregated stats for a project, grouped by dependency type.
@@ -628,6 +639,7 @@ func (q *Queries) GetProjectSummary(ctx context.Context, projectID int32) ([]Get
 			&i.Total,
 			&i.HasAttestation,
 			&i.HasOssRebuild,
+			&i.HasReproducible,
 			&i.BehaviorPassed,
 		); err != nil {
 			return nil, err
@@ -1256,6 +1268,10 @@ SELECT
      FROM package_version_tags pvt
      JOIN package_tag_types ptt ON ptt.id = pvt.tag_type
      WHERE pvt.package_version = pv.id AND ptt.label = 'oss_rebuild'), false)::bool AS has_oss_rebuild,
+    COALESCE((SELECT pvt.value = 'true'
+     FROM package_version_tags pvt
+     JOIN package_tag_types ptt ON ptt.id = pvt.tag_type
+     WHERE pvt.package_version = pv.id AND ptt.label = 'reproducible'), false)::bool AS has_reproducible,
     (SELECT pvt.value
      FROM package_version_tags pvt
      JOIN package_tag_types ptt ON ptt.id = pvt.tag_type
@@ -1288,6 +1304,7 @@ type ListPackageVersionsPublicRow struct {
 	SourceCommitHash pgtype.Text
 	HasAttestation   bool
 	HasOssRebuild    bool
+	HasReproducible  bool
 	BehaviorPassed   []byte
 	ManuallyApproved []byte
 	ReviewComment    []byte
@@ -1311,6 +1328,7 @@ func (q *Queries) ListPackageVersionsPublic(ctx context.Context, arg ListPackage
 			&i.SourceCommitHash,
 			&i.HasAttestation,
 			&i.HasOssRebuild,
+			&i.HasReproducible,
 			&i.BehaviorPassed,
 			&i.ManuallyApproved,
 			&i.ReviewComment,
@@ -1420,6 +1438,7 @@ SELECT
     pd.package_id,
     (CASE WHEN att.value IS NOT NULL THEN att.value = 'true'::jsonb ELSE NULL END) AS has_attestation,
     (CASE WHEN oss.value IS NOT NULL THEN oss.value = 'true'::jsonb ELSE NULL END) AS has_oss_rebuild,
+    (CASE WHEN rep.value IS NOT NULL THEN rep.value = 'true'::jsonb ELSE NULL END) AS has_reproducible,
     (CASE WHEN beh.value IS NOT NULL THEN beh.value = 'true'::jsonb ELSE NULL END) AS behavior_passed
 FROM project_dependencies pd
 JOIN packages p ON p.id = pd.package_id
@@ -1430,6 +1449,9 @@ LEFT JOIN package_version_tags att
 LEFT JOIN package_version_tags oss
     ON oss.package_version = pd.package_version_id
     AND oss.tag_type = (SELECT id FROM package_tag_types WHERE label = 'oss_rebuild')
+LEFT JOIN package_version_tags rep
+    ON rep.package_version = pd.package_version_id
+    AND rep.tag_type = (SELECT id FROM package_tag_types WHERE label = 'reproducible')
 LEFT JOIN package_version_tags beh
     ON beh.package_version = pd.package_version_id
     AND beh.tag_type = (SELECT id FROM package_tag_types WHERE label = 'behavior_passed')
@@ -1454,6 +1476,7 @@ type ListProjectDependenciesRow struct {
 	PackageID         int32
 	HasAttestation    interface{}
 	HasOssRebuild     interface{}
+	HasReproducible   interface{}
 	BehaviorPassed    interface{}
 }
 
@@ -1480,6 +1503,7 @@ func (q *Queries) ListProjectDependencies(ctx context.Context, arg ListProjectDe
 			&i.PackageID,
 			&i.HasAttestation,
 			&i.HasOssRebuild,
+			&i.HasReproducible,
 			&i.BehaviorPassed,
 		); err != nil {
 			return nil, err

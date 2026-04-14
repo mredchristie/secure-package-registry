@@ -20,7 +20,7 @@
   let verifying = $state(false);
   let error = $state("");
 
-  // Count how many checks pass (0-3): attestation, oss rebuild, behavior
+  // Trust score (0-3): provenance (grouped), behavioral analysis, manual review
   // Returns null if behavioral analysis hasn't been run yet
   function checksPassedCount(
     v: VersionSummary | null,
@@ -33,33 +33,26 @@
       return 3;
     }
 
-    // Get the three check statuses
-    const hasAttestation =
-      verify?.upstream_attestation ?? v?.has_attestation ?? false;
-    const hasOssRebuild = verify?.oss_rebuild ?? v?.has_oss_rebuild ?? false;
+    // Provenance is a group: any one of attestation, oss rebuild, or reproducible
+    const hasProvenance =
+      (verify?.upstream_attestation ?? v?.has_attestation ?? false) ||
+      (verify?.oss_rebuild ?? v?.has_oss_rebuild ?? false) ||
+      (v?.has_reproducible ?? false);
     const behaviorPassed = v?.behavior_passed;
 
-    // If behavioral analysis hasn't been run, this is not a full score
+    // If behavioral analysis hasn't been run, score is indeterminate
     if (behaviorPassed === null) {
       return null;
     }
 
-    // Special case: failed behavior but has both attestation/rebuild = 1/3
-    if (!behaviorPassed && hasAttestation && hasOssRebuild) {
-      return 1;
-    }
-
-    // Special case: passed behavior but lacks attestation/rebuild = 2/3
-    if (behaviorPassed && !hasAttestation && !hasOssRebuild) {
-      return 2;
-    }
-
-    // Default: count passed checks
-    let count = 0;
-    if (hasAttestation) count++;
-    if (hasOssRebuild) count++;
-    if (behaviorPassed) count++;
-    return count;
+    // Both pass = full trust
+    if (behaviorPassed && hasProvenance) return 3;
+    // Only behavior passes, missing provenance is common
+    if (behaviorPassed && !hasProvenance) return 2;
+    // Only provenance passes, failed behavior is a red flag
+    if (!behaviorPassed && hasProvenance) return 1;
+    // Neither passes
+    return 0;
   }
 
   function checksColor(count: number): string {
@@ -68,7 +61,7 @@
     return "checks-none";
   }
 
-  // Calculate trust score for a version using the same logic as checksPassedCount
+  // Calculate trust score for a version (used in version sidebar list)
   // Returns null if behavioral analysis is pending
   function calculateTrustScore(v: VersionSummary): number | null {
     // Manual approval always gives full trust
@@ -76,8 +69,8 @@
       return 3;
     }
 
-    const hasAttestation = v.has_attestation;
-    const hasOssRebuild = v.has_oss_rebuild;
+    const hasProvenance =
+      v.has_attestation || v.has_oss_rebuild || v.has_reproducible;
     const behaviorPassed = v.behavior_passed;
 
     // If behavioral analysis hasn't been run, return null to show "Pending"
@@ -85,22 +78,10 @@
       return null;
     }
 
-    // Special case: failed behavior but has both attestation/rebuild = 1/3
-    if (!behaviorPassed && hasAttestation && hasOssRebuild) {
-      return 1;
-    }
-
-    // Special case: passed behavior but lacks attestation/rebuild = 2/3
-    if (behaviorPassed && !hasAttestation && !hasOssRebuild) {
-      return 2;
-    }
-
-    // Default: count passed checks
-    let count = 0;
-    if (hasAttestation) count++;
-    if (hasOssRebuild) count++;
-    if (behaviorPassed) count++;
-    return count;
+    if (behaviorPassed && hasProvenance) return 3;
+    if (behaviorPassed && !hasProvenance) return 2;
+    if (!behaviorPassed && hasProvenance) return 1;
+    return 0;
   }
 
   // Find the current version's summary from the versions list
@@ -250,6 +231,16 @@
                 <span class="check-indicator fail">Missing</span>
               {/if}
               <span class="check-label">OSS reproducible build</span>
+            </div>
+
+            <!-- Reproducible build check -->
+            <div class="check-row">
+              {#if currentVersionSummary?.has_reproducible}
+                <span class="check-indicator pass">PASS</span>
+              {:else}
+                <span class="check-indicator fail">Missing</span>
+              {/if}
+              <span class="check-label">Verified reproducible build</span>
             </div>
 
             <!-- Behavioral analysis check -->

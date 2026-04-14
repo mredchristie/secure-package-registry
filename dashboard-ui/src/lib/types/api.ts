@@ -145,6 +145,7 @@ export interface VersionSummary {
 	behavior_passed: boolean | null;
 	has_attestation: boolean;
 	has_oss_rebuild: boolean;
+	has_reproducible: boolean;
 	latest: boolean;
 	manually_approved: boolean | null;
 	review_comment: string | null;
@@ -180,6 +181,7 @@ export interface ProjectDependency {
 	ecosystem: string;
 	has_attestation: boolean | null;
 	has_oss_rebuild: boolean | null;
+	has_reproducible: boolean | null;
 	id: number;
 	identifier: string;
 	version: string;
@@ -191,6 +193,7 @@ export interface ProjectSummaryRow {
 	dependency_type: DependencyType;
 	has_attestation: number;
 	has_oss_rebuild: number;
+	has_reproducible: number;
 	total: number;
 }
 
