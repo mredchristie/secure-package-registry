@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"time"
 
 	"git.duti.dev/secure-package-registry/internal/messages"
@@ -107,64 +108,77 @@ func Start(ctx context.Context, deps *services.Deps) error {
 
 	workflowFile := deps.Config.GitHub.WorkflowFile
 
-	for {
-		select {
-		case <-ctx.Done():
-			log.Info().Msg("Shutting down be-runner")
-			return nil
-		case msg, ok := <-messagesCh:
-			if !ok {
-				log.Info().Msg("Collection subscription closed")
-				return nil
+	const numWorkers = 10
+	var wg sync.WaitGroup
+
+	for range numWorkers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for msg := range messagesCh {
+				processMessage(ctx, resolver, mirrorer, gh, mc, publisher, workflowFile, msg)
 			}
-
-			var req messages.CollectionRequested
-			if err := gob.NewDecoder(bytes.NewReader(msg.Payload)).Decode(&req); err != nil {
-				log.Error().Err(err).Msg("Failed to decode collection request")
-				msg.Nack()
-				continue
-			}
-
-			if req.Ecosystem != "npm" {
-				log.Warn().Str("ecosystem", req.Ecosystem).Msg("Unsupported ecosystem")
-				msg.Ack()
-				continue
-			}
-
-			result, err := HandleCollection(ctx, resolver, mirrorer, gh, mc, workflowFile, req)
-			if err != nil {
-				log.Error().
-					Err(err).
-					Str("package", req.Identifier).
-					Str("version", req.Version).
-					Msg("Collection request failed")
-
-				publishCompletion(publisher, messages.CollectionCompleted{
-					TaskID:        req.TaskID,
-					Ecosystem:     req.Ecosystem,
-					Identifier:    req.Identifier,
-					Version:       req.Version,
-					FailureReason: err.Error(),
-				})
-				// Ack (not Nack) after publishing the failure completion event.
-				// Nacking would requeue the message, causing duplicate failure
-				// events or contradictory failure-then-success on retry.
-				msg.Ack()
-				continue
-			}
-
-			publishCompletion(publisher, messages.CollectionCompleted{
-				TaskID:         req.TaskID,
-				Ecosystem:      req.Ecosystem,
-				Identifier:     req.Identifier,
-				Version:        req.Version,
-				Success:        true,
-				ArtifactBucket: result.Bucket,
-				ArtifactKey:    result.Key,
-			})
-			msg.Ack()
-		}
+		}()
 	}
+
+	<-ctx.Done()
+	log.Info().Msg("Shutting down be-runner: waiting for in-flight collections to finish")
+	wg.Wait()
+	return nil
+}
+
+func processMessage(
+	ctx context.Context,
+	resolver *npm.Resolver,
+	mirrorer *gitea.Mirrorer,
+	gh *github.Client,
+	mc *sprminio.Client,
+	publisher watermillmsg.Publisher,
+	workflowFile string,
+	msg *watermillmsg.Message,
+) {
+	var req messages.CollectionRequested
+	if err := gob.NewDecoder(bytes.NewReader(msg.Payload)).Decode(&req); err != nil {
+		log.Error().Err(err).Msg("Failed to decode collection request")
+		msg.Nack()
+		return
+	}
+
+	if req.Ecosystem != "npm" {
+		log.Warn().Str("ecosystem", req.Ecosystem).Msg("Unsupported ecosystem")
+		msg.Ack()
+		return
+	}
+
+	result, err := HandleCollection(ctx, resolver, mirrorer, gh, mc, workflowFile, req)
+	if err != nil {
+		log.Error().
+			Err(err).
+			Str("package", req.Identifier).
+			Str("version", req.Version).
+			Msg("Collection request failed")
+
+		publishCompletion(publisher, messages.CollectionCompleted{
+			TaskID:        req.TaskID,
+			Ecosystem:     req.Ecosystem,
+			Identifier:    req.Identifier,
+			Version:       req.Version,
+			FailureReason: err.Error(),
+		})
+		msg.Ack()
+		return
+	}
+
+	publishCompletion(publisher, messages.CollectionCompleted{
+		TaskID:         req.TaskID,
+		Ecosystem:      req.Ecosystem,
+		Identifier:     req.Identifier,
+		Version:        req.Version,
+		Success:        true,
+		ArtifactBucket: result.Bucket,
+		ArtifactKey:    result.Key,
+	})
+	msg.Ack()
 }
 
 // CollectionResult holds the MinIO location of a stored artifact.
