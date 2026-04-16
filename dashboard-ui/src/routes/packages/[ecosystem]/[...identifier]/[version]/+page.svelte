@@ -17,7 +17,6 @@
   let versions = $state<VersionSummary[]>([]);
   let verifyResult = $state<VerifyResponse | null>(null);
   let loading = $state(true);
-  let verifying = $state(false);
   let error = $state("");
 
   // Trust score (0-3): provenance (grouped), behavioral analysis, manual review
@@ -125,26 +124,6 @@
     }
   }
 
-  async function runVerification() {
-    verifying = true;
-    try {
-      const result = await searchAPI.verify(ecosystem, identifier, version);
-      // Merge with OR logic: once true, stays true (per-version)
-      verifyResult = {
-        ecosystem: result.ecosystem,
-        identifier: result.identifier,
-        version: result.version,
-        upstream_attestation:
-          verifyResult?.upstream_attestation || result.upstream_attestation,
-        oss_rebuild: verifyResult?.oss_rebuild || result.oss_rebuild,
-      };
-    } catch {
-      error = "Verification failed.";
-    } finally {
-      verifying = false;
-    }
-  }
-
   // Load data when component mounts or route params change
   $effect(() => {
     // Re-run when route params change
@@ -203,13 +182,6 @@
         <section class="card">
           <div class="card-header-row">
             <h2 class="card-title">Verification</h2>
-            <button
-              onclick={runVerification}
-              disabled={verifying}
-              class="verify-btn"
-            >
-              {verifying ? "Verifying…" : "Run verification"}
-            </button>
           </div>
 
           <div class="check-grid">
