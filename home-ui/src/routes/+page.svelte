@@ -135,7 +135,7 @@
 			<div class="hero-badge">Trust but Verify</div>
 			<h1 class="hero-title">Secure Package Registry</h1>
 			<p class="hero-subtitle">
-				Verified package registry for npm, PyPI, Go, and Cargo — blocking malicious code before it
+				Verified package registry for npm, PyPI, Go, and Cargo, blocking malicious code before it
 				reaches your codebase
 			</p>
 			<a href="/landing" class="cta-button">Request Early Access</a>
@@ -173,7 +173,7 @@
 
 			<p class="problem-intro animate fade-in">
 				Supply chain attacks exploit the trust developers place in open-source packages. When you
-				run <code>npm install</code>, malicious code can execute immediately—stealing credentials,
+				run <code>npm install</code>, malicious code can execute immediately, stealing credentials,
 				injecting backdoors, or compromising your entire infrastructure. These aren't theoretical
 				risks, real attacks are happening right now...
 			</p>
