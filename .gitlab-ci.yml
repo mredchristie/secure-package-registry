@@ -3,7 +3,7 @@ stages:
   - sync_gh_runner
   - check
 
-image: golang:1.25.6
+image: golang:1.26
 
 variables:
   GIT_DEPTH: 0
