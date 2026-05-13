@@ -20,7 +20,7 @@
 		<button class="theme-toggle" onclick={onToggleTheme}>
 			{isDark ? 'Light' : 'Dark'}
 		</button>
-		<a href="{PUBLIC_DASHBOARD_BASE_URL}/" class="navbar-button"> Get Started </a>
+		<a href="/search" class="navbar-button"> Get Started </a>
 	</div>
 </header>
 

@@ -112,13 +112,11 @@ func Start(ctx context.Context, deps *services.Deps) error {
 	var wg sync.WaitGroup
 
 	for range numWorkers {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for msg := range messagesCh {
 				processMessage(ctx, resolver, mirrorer, gh, mc, publisher, workflowFile, msg)
 			}
-		}()
+		})
 	}
 
 	<-ctx.Done()

@@ -15,7 +15,7 @@
 <header>
   <div class="header-left">
     <div class="logo">
-      <a class="clear-a-stylings" href="{PUBLIC_HOME_BASE_URL}/">SPR</a>
+      <a class="clear-a-stylings" href="https://spr.mredchristie.dev/">SPR</a>
     </div>
   </div>
   <div class="header-middle">

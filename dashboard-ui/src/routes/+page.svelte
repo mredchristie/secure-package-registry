@@ -1,14 +1,13 @@
 <script lang="ts">
-  import { goto } from "$app/navigation";
+  import { PUBLIC_HOME_BASE_URL } from "$env/static/public";
   import { onMount } from "svelte";
 
-  // Redirect to /search on mount — the root page is the public search
   onMount(() => {
-    goto("/search", { replaceState: true });
+    window.location.replace(PUBLIC_HOME_BASE_URL);
   });
 </script>
 
-<main class="redirect">Redirecting to search...</main>
+<main class="redirect">Redirecting...</main>
 
 <style>
   .redirect {

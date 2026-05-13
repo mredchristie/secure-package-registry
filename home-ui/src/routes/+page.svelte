@@ -138,7 +138,7 @@
 				Verified package registry for npm, PyPI, Go, and Cargo, blocking malicious code before it
 				reaches your codebase
 			</p>
-			<a href="/landing" class="cta-button">Request Early Access</a>
+			<a href="/search" class="cta-button">Request Early Access</a>
 		</div>
 	</section>
 
@@ -248,7 +248,7 @@
 			<p class="animate fade-in delay-1">
 				Join us at SPR to be the change protecting against the $46B attack problem
 			</p>
-			<a href="/landing" class="cta-button animate zoom-in delay-2">Get Started</a>
+			<a href="/search" class="cta-button animate zoom-in delay-2">Get Started</a>
 		</div>
 	</section>
 
