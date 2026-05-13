@@ -29,6 +29,12 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Sanitize artifact name
+        id: sanitize
+        run: |
+          SAFE_NAME=$(echo "${{ github.event.inputs.package }}" | tr '/@:' '---')
+          echo "safe_name=$SAFE_NAME" >> $GITHUB_OUTPUT
+
       - name: Install Tracee via apt
         run: |
           sudo apt-get update -qq
@@ -67,7 +73,6 @@ jobs:
           sudo kill $TRACEE_PID 2>/dev/null || true
           sudo chown $USER /tmp/behavior.jsonl 2>/dev/null || true
           
-          # Ensure file has content even if tracee didn't run
           if [ ! -s /tmp/behavior.jsonl ]; then
             echo '{"timestamp":0,"eventName":"placeholder","processName":"node","args":[]}' > /tmp/behavior.jsonl
           fi
@@ -75,6 +80,6 @@ jobs:
       - name: Upload behavior artifact
         uses: actions/upload-artifact@v4
         with:
-          name: behavior-${{ github.event.inputs.package }}-${{ github.event.inputs.version }}
+          name: behavior-${{ steps.sanitize.outputs.safe_name }}-${{ github.event.inputs.version }}
           path: /tmp/behavior.jsonl
           retention-days: 7
