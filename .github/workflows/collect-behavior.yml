@@ -21,9 +21,6 @@ jobs:
       contents: read
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -35,51 +32,60 @@ jobs:
           SAFE_NAME=$(echo "${{ github.event.inputs.package }}" | tr '/@:' '---')
           echo "safe_name=$SAFE_NAME" >> $GITHUB_OUTPUT
 
-      - name: Install Tracee via apt
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y apt-transport-https gnupg
-          curl -fsSL https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo gpg --dearmor -o /usr/share/keyrings/aquasecurity.gpg
-          echo "deb [signed-by=/usr/share/keyrings/aquasecurity.gpg] https://aquasecurity.github.io/trivy-repo/deb generic main" | sudo tee /etc/apt/sources.list.d/aquasecurity.list
-          sudo apt-get update -qq
-          sudo apt-get install -y tracee || true
-
       - name: Create package directory
-        run: mkdir -p /tmp/pkg-test
+        run: |
+          mkdir -p /tmp/pkg-test /tmp/tracee
+          cd /tmp/pkg-test
+          npm init -y
 
-      - name: Install package
+      - name: Start Tracee
+        run: |
+          docker run --detach --name tracee \
+            --pid=host --cgroupns=host --privileged \
+            -v /etc/os-release:/etc/os-release-host:ro \
+            -v /tmp/tracee:/tmp/tracee \
+            aquasec/tracee:0.24.1 \
+            --output json \
+            --output option:parse-arguments \
+            --output file:/tmp/tracee/behavior.jsonl \
+            --events execve,openat,connect,net_packet_dns_request,net_packet_dns_response
+          # Wait until Tracee has attached its probes and created the output
+          # file, so the npm install below is fully inside the trace window.
+          for i in $(seq 1 60); do
+            if sudo test -f /tmp/tracee/behavior.jsonl; then
+              echo "Tracee output file present after $((i*2))s"
+              break
+            fi
+            if [ "$(docker inspect -f '{{.State.Running}}' tracee)" != "true" ]; then
+              echo "Tracee container exited early:"
+              docker logs tracee
+              break
+            fi
+            sleep 2
+          done
+          sleep 5
+
+      - name: Install and exercise package (traced)
         working-directory: /tmp/pkg-test
         run: |
-          npm init -y
-          npm install ${{ github.event.inputs.package }}@${{ github.event.inputs.version }}
-
-      - name: Run behavioral analysis
-        run: |
-          touch /tmp/behavior.jsonl
-          if command -v tracee &> /dev/null; then
-            sudo tracee \
-              --output json \
-              --output option:parse-arguments \
-              --events openat,execve,connect,bind,socket,write,read \
-              --output file:/tmp/behavior.jsonl &
-            TRACEE_PID=$!
-            sleep 3
-          fi
-          
-          cd /tmp/pkg-test
+          npm install "${{ github.event.inputs.package }}@${{ github.event.inputs.version }}"
           timeout 10 node -e "try { require('${{ github.event.inputs.package }}') } catch(e) { console.log('Import error:', e.message) }" || true
-          
           sleep 5
-          sudo kill $TRACEE_PID 2>/dev/null || true
-          sudo chown $USER /tmp/behavior.jsonl 2>/dev/null || true
-          
-          if [ ! -s /tmp/behavior.jsonl ]; then
-            echo '{"timestamp":0,"eventName":"placeholder","processName":"node","args":[]}' > /tmp/behavior.jsonl
+
+      - name: Stop Tracee and collect output
+        run: |
+          docker stop -t 15 tracee || true
+          sudo chown "$USER" /tmp/tracee/behavior.jsonl 2>/dev/null || true
+          if [ ! -s /tmp/tracee/behavior.jsonl ]; then
+            echo "WARNING: Tracee produced no events; uploading placeholder"
+            docker logs tracee || true
+            echo '{"timestamp":0,"eventName":"placeholder","processName":"node","args":[]}' > /tmp/tracee/behavior.jsonl
           fi
+          wc -l /tmp/tracee/behavior.jsonl
 
       - name: Upload behavior artifact
         uses: actions/upload-artifact@v4
         with:
           name: behavior-${{ steps.sanitize.outputs.safe_name }}-${{ github.event.inputs.version }}
-          path: /tmp/behavior.jsonl
+          path: /tmp/tracee/behavior.jsonl
           retention-days: 7

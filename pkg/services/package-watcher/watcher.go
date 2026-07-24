@@ -77,7 +77,10 @@ func (w *watcher) Start(ctx context.Context) error {
 			case msg := <-requestsCh:
 				var req messages.PackageRequest
 				if err := gob.NewDecoder(bytes.NewReader(msg.Payload)).Decode(&req); err != nil {
-					msg.Nack()
+					// A payload that fails to decode will never succeed on
+					// redelivery; drop it instead of requeueing forever.
+					log.Error().Err(err).Msg("Dropping undecodable package request")
+					msg.Ack()
 					continue
 				}
 				log.Info().
@@ -87,11 +90,15 @@ func (w *watcher) Start(ctx context.Context) error {
 				// Handle the package request by triggering fetching the initial version and adding to watch list
 				w.insertWatchedPackage(req.Ecosystem, req.Identifier, "")
 				if err := w.checkVersionAndPublish(ctx, req.Ecosystem, req.Identifier); err != nil {
+					// Ack rather than Nack: requeueing a package that does not
+					// exist upstream (e.g. a typo) redelivers it in a hot loop.
+					// Transient upstream errors are retried by the periodic
+					// version poll since the package is on the watch list.
 					log.Error().
 						Err(err).
 						Str("identifier", req.Identifier).
-						Msg("Failed to check version and publish update")
-					msg.Nack()
+						Msg("Failed to check version and publish update, dropping request")
+					msg.Ack()
 					continue
 				}
 				msg.Ack()
