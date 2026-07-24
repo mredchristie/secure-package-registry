@@ -34,7 +34,8 @@ jobs:
 
       - name: Create package directory
         run: |
-          mkdir -p /tmp/pkg-test /tmp/tracee
+          mkdir -p /tmp/pkg-test /tmp/tracee-out
+          chmod 777 /tmp/tracee-out
           cd /tmp/pkg-test
           npm init -y
 
@@ -43,15 +44,15 @@ jobs:
           docker run --detach --name tracee \
             --pid=host --cgroupns=host --privileged \
             -v /etc/os-release:/etc/os-release-host:ro \
-            -v /tmp/tracee:/tmp/tracee \
+            -v /tmp/tracee-out:/out \
             aquasec/tracee:0.24.1 \
-            --output json:/tmp/tracee/behavior.jsonl \
+            --output json:/out/behavior.jsonl \
             --output option:parse-arguments \
             --events execve,openat,connect,net_packet_dns_request,net_packet_dns_response
           # Wait until Tracee has attached its probes and created the output
           # file, so the npm install below is fully inside the trace window.
           for i in $(seq 1 60); do
-            if sudo test -f /tmp/tracee/behavior.jsonl; then
+            if sudo test -f /tmp/tracee-out/behavior.jsonl; then
               echo "Tracee output file present after $((i*2))s"
               break
             fi
@@ -74,17 +75,17 @@ jobs:
       - name: Stop Tracee and collect output
         run: |
           docker stop -t 15 tracee || true
-          sudo chown "$USER" /tmp/tracee/behavior.jsonl 2>/dev/null || true
-          if [ ! -s /tmp/tracee/behavior.jsonl ]; then
+          sudo chown "$USER" /tmp/tracee-out/behavior.jsonl 2>/dev/null || true
+          if [ ! -s /tmp/tracee-out/behavior.jsonl ]; then
             echo "WARNING: Tracee produced no events; uploading placeholder"
             docker logs tracee || true
-            echo '{"timestamp":0,"eventName":"placeholder","processName":"node","args":[]}' > /tmp/tracee/behavior.jsonl
+            echo '{"timestamp":0,"eventName":"placeholder","processName":"node","args":[]}' > /tmp/tracee-out/behavior.jsonl
           fi
-          wc -l /tmp/tracee/behavior.jsonl
+          wc -l /tmp/tracee-out/behavior.jsonl
 
       - name: Upload behavior artifact
         uses: actions/upload-artifact@v4
         with:
           name: behavior-${{ steps.sanitize.outputs.safe_name }}-${{ github.event.inputs.version }}
-          path: /tmp/tracee/behavior.jsonl
+          path: /tmp/tracee-out/behavior.jsonl
           retention-days: 7
