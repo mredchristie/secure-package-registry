@@ -45,9 +45,8 @@ jobs:
             -v /etc/os-release:/etc/os-release-host:ro \
             -v /tmp/tracee:/tmp/tracee \
             aquasec/tracee:0.24.1 \
-            --output json \
+            --output json:/tmp/tracee/behavior.jsonl \
             --output option:parse-arguments \
-            --output file:/tmp/tracee/behavior.jsonl \
             --events execve,openat,connect,net_packet_dns_request,net_packet_dns_response
           # Wait until Tracee has attached its probes and created the output
           # file, so the npm install below is fully inside the trace window.
